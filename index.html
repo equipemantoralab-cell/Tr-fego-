@@ -127,14 +127,20 @@ function card(r) {
 function table(cols, rows) {
   return `<div class="tw"><table><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></div>`;
 }
-function msgBox(p) {
-  const txt = E.mensagemInterna({ ...p, acaoFeita: "" });
-  return `<details class="sub"><summary>Mensagem para a área acionada (padrão da seção 52)</summary><pre>${esc(txt)}</pre><button class="act" data-copy="${esc(txt)}">Copiar mensagem</button></details>`;
+function buildMsg(x, extra = {}) {
+  const r = x.r;
+  return E.mensagemInterna({ modelo: x.modelo, meta: x.meta, atual: x.atual, etapa: r.decisao, metricas: r.evidencias, hipotese: r.diagnostico, hipoteseAlternativa: extra.hipAlt, acaoFeita: extra.acao, pedido: extra.pedido || x.pedido, responsaveis: r.responsaveis });
+}
+function msgBox(x) {
+  const txt = buildMsg(x);
+  return `<details class="sub" data-keep="msg"><summary>Mensagem para a área acionada (padrão da seção 52)</summary><pre>${esc(txt)}</pre><button class="act" data-copy="${esc(txt)}">Copiar mensagem</button></details>`;
 }
 const fmtPct = (v) => (Number.isFinite(v) ? (v * 100).toFixed(1).replace(".", ",") + "%" : "—");
 
 // ---- módulos de cálculo --------------------------------------------------------------
 const bumpFields = [F("b1p", "Bump 1 (barato) — preço (R$)", "n", 9.9), F("b1a", "Bump 1 — adesão (%)", "n", 27), F("b2p", "Bump 2 (intermediário) — preço (R$)", "n", 24), F("b2a", "Bump 2 — adesão (%)", "n", 12), F("b3p", "Bump 3 (maior valor) — preço (R$)", "n", 67), F("b3a", "Bump 3 — adesão (%)", "n", 6)];
+
+const CTX_LABEL = { "low-diag": "Low Ticket — diagnóstico do funil", "med-pagina": "Médio — venda direta por página", "med-vsl": "Médio — VSL", "med-quiz": "Médio — Quiz", "med-assist": "Médio — modelo assistido", "med-hibrido": "Médio — híbrido", "high-diag": "High Ticket — pipeline comercial", "lan-ritmo": "Lançamento — ritmo de captação", "lan-carrinho": "Lançamento — carrinho aberto" };
 
 const CALCS = {
   "low-papel": { group: "Low Ticket", sec: "2, 4", title: "CPA esperado e plano de teste ABO",
@@ -171,11 +177,10 @@ const CALCS = {
       F("retCriativo", "Retenção ao longo do criativo", ["|—", "ok|Mantém até o CTA", "queda|Perde atenção no desenvolvimento", "forte|Queda forte antes do CTA"], ""),
       F("connect", "Connect Rate (%)", "n", 91), F("paginaCheckout", "Página → Checkout (%)", "n", 11), F("checkoutCompra", "Checkout → Compra (%)", "n", ""), F("bumpBarato", "Bump barato (%)", "n", ""), F("bumpMaior", "Bump maior (%)", "n", "")],
     run(d, p) {
-      const dn = { ...d }; ["cpaReal", "cpaEsperado", "cpm", "ctr", "connect", "paginaCheckout", "checkoutCompra", "bumpBarato", "bumpMaior"].forEach((k) => (dn[k] = n(d[k])));
-      const r = E.diagnosticarLow(dn, p);
+      const x = CTX["low-diag"](d, p); const r = x.r;
       const rows = (r.leituras || []).map((l) => [esc(l.label), String(l.valor).replace(".", ","), `<span class="${l.faixa === "abaixo" ? "no" : "ok"}">${l.faixa}</span>`]);
       return card(r) + (rows.length ? table(["Métrica", "Valor", "Faixa"], rows) : "") +
-        msgBox({ modelo: "Low Ticket", meta: `CPA ${brl(n(d.cpaEsperado))}`, atual: `CPA ${brl(n(d.cpaReal))}`, etapa: r.decisao, metricas: r.evidencias, hipotese: r.diagnostico, pedido: "Revisão e retorno com plano de ação", responsaveis: r.responsaveis });
+        msgBox(x);
     } },
 
   "med-eco": { group: "Médio Ticket", sec: "18", title: "Economia pré-funil (CPA/CAC máximo)",
@@ -196,8 +201,7 @@ const CALCS = {
 function etapasCalc({ id, sec, title, hint, etapas, ex }) {
   return { group: "Médio Ticket", sec, title, hint: hint + " As metas de etapa vêm do histórico do cliente (o POP não fixa números); os valores iniciais são só exemplo.",
     fields: [F("cpaReal", "CPA real (R$)", "n", 190), F("cpaMeta", "CPA-alvo (R$)", "n", 120), ...etapas.flatMap((e, i) => [F(`r${i}`, `${e.nome} — real (%)`, "n", ex[i]?.[0] ?? ""), F(`m${i}`, `${e.nome} — meta (%)`, "n", ex[i]?.[1] ?? "")])],
-    run(d) { const r = E.diagnosticarEtapas({ cpaReal: n(d.cpaReal), cpaMeta: n(d.cpaMeta), etapas: etapas.map((e, i) => ({ ...e, real: n(d[`r${i}`]), meta: n(d[`m${i}`]) })) });
-      return card(r) + msgBox({ modelo: `Médio Ticket — ${title}`, meta: `CPA-alvo ${brl(n(d.cpaMeta))}`, atual: `CPA ${brl(n(d.cpaReal))}`, etapa: r.decisao, metricas: r.evidencias, hipotese: r.diagnostico, pedido: "Revisão da etapa indicada", responsaveis: r.responsaveis }); } };
+    run(d) { const x = CTX[id](d); return card(x.r) + msgBox(x); } };
 }
 CALCS["med-pagina"] = etapasCalc({ id: "med-pagina", sec: "20", title: "Diagnóstico — venda direta por página", hint: "Anúncio → página → checkout → compra.", etapas: E.ETAPAS_PAGINA, ex: [[1.2, 1], [92, 80], [9, 15], [45, 40]] });
 CALCS["med-vsl"] = etapasCalc({ id: "med-vsl", sec: "21", title: "Diagnóstico — VSL", hint: "Descubra em qual trecho a persuasão quebra.", etapas: E.ETAPAS_VSL, ex: [[85, 80], [30, 30], [55, 50], [18, 25], [22, 20], [30, 30], [42, 40]] });
@@ -206,11 +210,11 @@ Object.assign(CALCS, {
   "med-assist": { group: "Médio Ticket", sec: "23", title: "Modelo assistido (lead → comercial)",
     hint: "CAC total = (mídia + custo comercial) ÷ vendas. CPL é só controle.",
     fields: [F("gastoMidia", "Gasto de mídia (R$)", "n", 3000), F("custoComercial", "Custo comercial no período (R$)", "n", 800), F("leads", "Leads", "n", 150), F("contatados", "Contatados", "n", 105), F("qualificados", "Qualificados", "n", 40), F("vendas", "Vendas", "n", 8), F("cacMax", "CAC máximo (R$)", "n", 400)],
-    run: (d) => card(E.cacAssistido({ gastoMidia: n(d.gastoMidia), custoComercial: n(d.custoComercial) || 0, leads: n(d.leads), contatados: n(d.contatados), qualificados: n(d.qualificados), vendas: n(d.vendas), cacMax: n(d.cacMax) })) },
+    run(d) { const x = CTX["med-assist"](d); return card(x.r) + msgBox(x); } },
   "med-hibrido": { group: "Médio Ticket", sec: "24", title: "Modelo híbrido (CPA direto × CAC assistido)",
     hint: "Separe as duas rotas: misturar tudo em um único CAC esconde o que realmente funciona.",
     fields: [F("gastoDireto", "Mídia atribuída à venda direta (R$)", "n", 2000), F("vendasDiretas", "Vendas diretas", "n", 14), F("gastoAssistido", "Mídia atribuída à rota assistida (R$)", "n", 1500), F("custoComercial", "Custo comercial (R$)", "n", 600), F("vendasAssistidas", "Vendas assistidas", "n", 6), F("cpaMax", "CPA máximo direto (R$)", "n", 160), F("cacMax", "CAC máximo assistido (R$)", "n", 400)],
-    run: (d) => card(E.hibrido({ gastoDireto: n(d.gastoDireto), vendasDiretas: n(d.vendasDiretas), gastoAssistido: n(d.gastoAssistido), custoComercial: n(d.custoComercial) || 0, vendasAssistidas: n(d.vendasAssistidas), cpaMax: n(d.cpaMax), cacMax: n(d.cacMax) })) },
+    run(d) { const x = CTX["med-hibrido"](d); return card(x.r) + msgBox(x); } },
 
   "high-eco": { group: "High Ticket", sec: "29", title: "Economia reversa do funil",
     hint: "Parte do CAC máximo e volta etapa a etapa com as taxas do CRM. Marque como provisórias as taxas sem histórico.",
@@ -220,8 +224,7 @@ Object.assign(CALCS, {
   "high-diag": { group: "High Ticket", sec: "28, 32–35", title: "Diagnóstico do pipeline comercial",
     hint: "Localiza a primeira etapa abaixo da meta antes de culpar a mídia. CAC decide; CPL/CPQL/agendamento são previsão e diagnóstico. Metas de etapa em % (histórico do CRM).",
     fields: [F("gasto", "Gasto (R$)", "n", 2856), F("cacMax", "CAC máximo (R$)", "n", 1500), F("leads", "Leads", "n", 42), F("contatados", "Contatados", "n", 24), F("qualificados", "Qualificados", "n", 4), F("agendados", "Agendados", "n", 3), F("compareceram", "Compareceram", "n", 2), F("vendas", "Vendas", "n", 0), F("metaContato", "Meta contato (%)", "n", 80), F("metaQualificacao", "Meta qualificação (%)", "n", 35), F("metaAgendamento", "Meta agendamento (%)", "n", 50), F("metaShow", "Meta comparecimento (%)", "n", 65), F("metaFechamento", "Meta fechamento (%)", "n", 25), F("dentroDoCiclo", "Ainda dentro do ciclo médio de venda", "c", false), F("capacidadeSaturada", "Agenda comercial saturada", "c", false)],
-    run(d) { const r = E.diagnosticarHighTicket(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, typeof v === "boolean" ? v : n(v)])));
-      return card(r) + msgBox({ modelo: "High Ticket", meta: `CAC máx. ${brl(n(d.cacMax))}`, atual: `Gasto ${brl(n(d.gasto))}, ${n(d.leads)} leads, ${n(d.vendas)} venda(s)`, etapa: r.decisao, metricas: r.evidencias, hipotese: r.diagnostico, pedido: "Revisar a etapa indicada antes de aumentar verba", responsaveis: r.responsaveis }); } },
+    run(d) { const x = CTX["high-diag"](d); return card(x.r) + msgBox(x); } },
   "high-motivos": { group: "High Ticket", sec: "34", title: "Analisador de motivos de perda",
     hint: "“Lead ruim” não é diagnóstico: informe quantos leads cada motivo padronizado explica. O agrupamento por área é provisório (o POP não o define).",
     fields: MOTIVOS_PERDA.map((m, i) => F(m.id, m.label, "n", [8, 5, 2, 1, 6, 12, 3, 4, 1, 3][i])),
@@ -240,8 +243,8 @@ Object.assign(CALCS, {
   "lan-ritmo": { group: "Lançamento", sec: "40, 41", title: "Ritmo de captação",
     hint: "Índice de ritmo entre 0,90 e 1,10 ≈ no plano. Cruzado com o CPL define a ação.",
     fields: [F("metaLeads", "Meta de leads", "n", 10000), F("leadsAcumulados", "Leads acumulados", "n", 3200), F("diasTotais", "Dias de captação", "n", 14), F("diaAtual", "Dia atual", "n", 6), F("cplAtual", "CPL atual (R$)", "n", 3.1), F("cplMeta", "CPL meta (R$)", "n", 3.5), F("mediaRecente", "Média recente de leads/dia (opcional)", "n", "")],
-    run(d, p) { const r = E.ritmoCaptacao({ metaLeads: n(d.metaLeads), leadsAcumulados: n(d.leadsAcumulados), diasTotais: n(d.diasTotais), diaAtual: n(d.diaAtual), cplAtual: n(d.cplAtual), cplMeta: n(d.cplMeta), mediaRecente: n(d.mediaRecente) }, p);
-      const m = r.metricas; return card(r) + kpis([["Planejado até hoje", num(m.planejado)], ["Leads restantes", num(Math.ceil(m.restantes))], ["Leads/dia necessários", num(Math.ceil(m.porDia))], ["Verba diária necessária", brl(m.verbaDiaria)], ["Projeção final simples", num(m.projecao)]]); } },
+    run(d, p) { const x = CTX["lan-ritmo"](d, p); const r = x.r;
+      const m = r.metricas; return card(r) + msgBox(x) + kpis([["Planejado até hoje", num(m.planejado)], ["Leads restantes", num(Math.ceil(m.restantes))], ["Leads/dia necessários", num(Math.ceil(m.porDia))], ["Verba diária necessária", brl(m.verbaDiaria)], ["Projeção final simples", num(m.projecao)]]); } },
   "lan-origem": { group: "Lançamento", sec: "42, 43, 48", title: "Análise por origem / coorte (CPL × receita)",
     hint: "Não corte uma origem só pelo CPL: compare custo de lead com receita por lead. Criativo barato com coorte fraca não deve ser premiado; criativo caro com coorte compradora deve ser preservado.",
     fields: [0, 1, 2, 3, 4].flatMap((i) => { const ex = [["Criativo A", 1800, 500, 14, 8400], ["Criativo B", 1500, 700, 9, 5400], ["Criativo C", 900, 150, 8, 4800], ["", "", "", "", ""], ["", "", "", "", ""]][i];
@@ -254,7 +257,7 @@ Object.assign(CALCS, {
     hint: "Na abertura a prioridade migra de CPL para vendas, CAC, conversão e receita por coorte. Campos opcionais habilitam CAC acumulado/marginal, receita por lead e ROAS.",
     fields: [F("vendas", "Vendas até agora", "n", 120), F("metaVendasAteAgora", "Vendas esperadas até agora", "n", 160), F("cac", "CAC atual (R$)", "n", 180), F("cacMax", "CAC máximo (R$)", "n", 200), F("baseLeads", "Leads na base", "n", 9000), F("cliquesOferta", "Cliques para a página de vendas", "n", 2400), F("checkoutIniciado", "Checkouts iniciados", "n", 520), F("compras", "Compras", "n", 120),
       F("gastoTotal", "Gasto total (R$) — opcional", "n", 21600), F("receita", "Receita (R$) — opcional", "n", 59640), F("gastoRecente", "Gasto recente (R$) — opcional", "n", 4000), F("vendasRecentes", "Vendas com a verba recente — opcional", "n", 18)],
-    run(d, p) { return card(E.carrinhoAberto(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, n(v)])), p)); } },
+    run(d, p) { const x = CTX["lan-carrinho"](d, p); return card(x.r) + msgBox(x); } },
   "lan-forecast": { group: "Lançamento", sec: "48", title: "Forecast × realizado (pós-lançamento)",
     hint: "O forecast estava correto? Compare CPL, conversão e ticket projetados com os realizados para calibrar a próxima edição.",
     fields: [F("pl", "Planejado: leads", "n", 10000), F("pc", "Planejado: CPL (R$)", "n", 3.5), F("pv", "Planejado: conversão lead→venda (%)", "n", 2), F("pt", "Planejado: ticket médio (R$)", "n", 497),
@@ -275,14 +278,50 @@ Object.assign(CALCS, {
       return kpis([["Dias desde a última", String(r.dias)], ["Janela de revisão", `${r.janelaInicio.split("-").reverse().join("/")} a ${r.janelaFim.split("-").reverse().join("/")}`], ["Situação", r.estado]]); } },
 
   "gov-msg": { group: "Governança", sec: "52", title: "Gerador de mensagem entre áreas",
-    hint: "Evite “a campanha está ruim, o que eu faço?”. Envie meta, resultado, etapa, métricas, hipótese, ação já feita e pedido claro.",
-    fields: [F("modelo", "Modelo", ["Low Ticket|Low Ticket", "Médio Ticket|Médio Ticket", "High Ticket|High Ticket", "Lançamento|Lançamento"], "High Ticket", true),
-      F("meta", "1. Meta econômica", "t", "CAC-alvo R$ 1.500", true), F("atual", "2. Resultado atual", "t", "CPL atual R$ 68, dentro da meta derivada", true), F("etapa", "3. Etapa da anomalia", "t", "Pós-aquisição: qualificação", true),
-      F("metricas", "4. Métricas (uma por linha)", "a", "42 leads\n24 contatados\n4 qualificados", true), F("hipotese", "5. Hipótese principal", "t", "Mensagem/critérios do formulário atraem perfil fora do ICP", true), F("hipAlt", "5b. Hipótese alternativa", "t", "", true),
-      F("acao", "6. Ação já executada", "t", "", true), F("pedido", "7. Pedido claro", "t", "Revisar mensagem + critérios do formulário antes de aumentar verba", true), F("resp", "Áreas acionadas (separe por vírgula)", "t", "Estratégia, Copy", true)],
-    run(d) { const txt = E.mensagemInterna({ modelo: d.modelo, meta: d.meta, atual: d.atual, etapa: d.etapa, metricas: String(d.metricas || "").split("\n").filter(Boolean), hipotese: d.hipotese, hipoteseAlternativa: d.hipAlt, acaoFeita: d.acao, pedido: d.pedido, responsaveis: String(d.resp || "").split(",").map((s) => s.trim()).filter(Boolean) });
-      return `<pre>${esc(txt)}</pre><button class="act" data-copy="${esc(txt)}">Copiar mensagem</button>`; } },
+    hint: "Escolha de onde vêm os números e altere-os aqui mesmo: a mensagem é recalculada na hora (meta, resultado, etapa, métricas, hipótese e responsáveis). Evite “a campanha está ruim, o que eu faço?”.",
+    fields: [F("fonte", "Fonte dos números", Object.entries(CTX_LABEL).map(([k, v]) => `${k}|${v}`), "high-diag", true), F("hipAlt", "Hipótese alternativa (opcional)", "t", "", true), F("acao", "Ação já executada (opcional)", "t", "", true), F("pedido", "Pedido claro (em branco = sugerido pelo diagnóstico)", "t", "", true)],
+    run(d, p) { const src = CTX_LABEL[d.fonte] ? d.fonte : "high-diag"; const x = CTX[src](defVals(src), p); const txt = buildMsg(x, { hipAlt: d.hipAlt, acao: d.acao, pedido: d.pedido });
+      return card(x.r) + `<pre>${esc(txt)}</pre><button class="act" data-copy="${esc(txt)}">Copiar mensagem</button>`; } },
 });
+
+
+// Contexto de mensagem de cada módulo: {modelo, meta, atual, pedido, r}. Usado pelo bloco de mensagem do módulo
+// e pelo gerador de Governança, que relê os números do módulo escolhido.
+const nums = (d, ks) => Object.fromEntries(ks.map((k) => [k, n(d[k])]));
+const CTX = {
+  "low-diag": (d, p) => {
+    const dn = { ...d, ...nums(d, ["cpaReal", "cpaEsperado", "cpm", "ctr", "connect", "paginaCheckout", "checkoutCompra", "bumpBarato", "bumpMaior"]) };
+    return { modelo: "Low Ticket", meta: `CPA esperado ${brl(dn.cpaEsperado)}`, atual: `CPA ${brl(dn.cpaReal)}`, pedido: "Revisão e retorno com plano de ação", r: E.diagnosticarLow(dn, p) };
+  },
+  "med-assist": (d) => {
+    const r = E.cacAssistido({ gastoMidia: n(d.gastoMidia), custoComercial: n(d.custoComercial) || 0, leads: n(d.leads), contatados: n(d.contatados), qualificados: n(d.qualificados), vendas: n(d.vendas), cacMax: n(d.cacMax) });
+    return { modelo: "Médio Ticket — modelo assistido", meta: `CAC máx. ${brl(n(d.cacMax))}`, atual: `${n(d.leads)} leads, ${n(d.vendas)} venda(s), CAC ${brl(r.cac)}`, pedido: "Corrigir a etapa de menor taxa antes de escalar mídia", r };
+  },
+  "med-hibrido": (d) => {
+    const r = E.hibrido({ gastoDireto: n(d.gastoDireto), vendasDiretas: n(d.vendasDiretas), gastoAssistido: n(d.gastoAssistido), custoComercial: n(d.custoComercial) || 0, vendasAssistidas: n(d.vendasAssistidas), cpaMax: n(d.cpaMax), cacMax: n(d.cacMax) });
+    return { modelo: "Médio Ticket — híbrido", meta: `CPA máx. direto ${brl(n(d.cpaMax))}; CAC máx. assistido ${brl(n(d.cacMax))}`, atual: `${n(d.vendasDiretas)} vendas diretas e ${n(d.vendasAssistidas)} assistidas`, pedido: "Tratar cada rota separadamente", r };
+  },
+  "high-diag": (d) => {
+    const dn = Object.fromEntries(Object.entries(d).map(([k, v]) => [k, typeof v === "boolean" ? v : n(v)]));
+    return { modelo: "High Ticket", meta: `CAC máx. ${brl(dn.cacMax)}`, atual: `Gasto ${brl(dn.gasto)}, ${dn.leads} leads, ${dn.vendas} venda(s)`, pedido: "Revisar a etapa indicada antes de aumentar verba", r: E.diagnosticarHighTicket(dn) };
+  },
+  "lan-ritmo": (d, p) => {
+    const r = E.ritmoCaptacao({ metaLeads: n(d.metaLeads), leadsAcumulados: n(d.leadsAcumulados), diasTotais: n(d.diasTotais), diaAtual: n(d.diaAtual), cplAtual: n(d.cplAtual), cplMeta: n(d.cplMeta), mediaRecente: n(d.mediaRecente) }, p);
+    return { modelo: "Lançamento — captação", meta: `${num(n(d.metaLeads))} leads em ${n(d.diasTotais)} dias, CPL ${brl(n(d.cplMeta))}`, atual: `${num(n(d.leadsAcumulados))} leads no dia ${n(d.diaAtual)}, CPL ${brl(n(d.cplAtual))}`, pedido: "Executar a ação indicada e recalcular a projeção", r };
+  },
+  "lan-carrinho": (d, p) => {
+    const dn = Object.fromEntries(Object.entries(d).map(([k, v]) => [k, n(v)]));
+    return { modelo: "Lançamento — carrinho aberto", meta: `${dn.metaVendasAteAgora} vendas esperadas, CAC máx. ${brl(dn.cacMax)}`, atual: `${dn.vendas} vendas, CAC ${brl(dn.cac)}`, pedido: "Atuar na etapa indicada", r: E.carrinhoAberto(dn, p) };
+  },
+};
+const etapasCtx = (title, etapas) => (d) => {
+  const r = E.diagnosticarEtapas({ cpaReal: n(d.cpaReal), cpaMeta: n(d.cpaMeta), etapas: etapas.map((e, i) => ({ ...e, real: n(d[`r${i}`]), meta: n(d[`m${i}`]) })) });
+  return { modelo: `Médio Ticket — ${title}`, meta: `CPA-alvo ${brl(n(d.cpaMeta))}`, atual: `CPA ${brl(n(d.cpaReal))}`, pedido: "Revisão da etapa indicada", r };
+};
+CTX["med-pagina"] = etapasCtx("venda direta por página", E.ETAPAS_PAGINA);
+CTX["med-vsl"] = etapasCtx("VSL", E.ETAPAS_VSL);
+CTX["med-quiz"] = etapasCtx("Quiz / diagnóstico", E.ETAPAS_QUIZ);
+const defVals = (id) => { const st = store.get(id); return Object.fromEntries(CALCS[id].fields.map((f) => [f.id, st[f.id] ?? f.def])); };
 
 // Logs (registro de aprendizados e benchmark)
 const LOGS = {
@@ -319,9 +358,16 @@ function fieldHtml(id, f, vals) {
 }
 const head = (m) => `<h2><span class="sec">§ ${esc(m.sec)}</span>${esc(m.title)}</h2><p class="hint">${esc(m.hint || "")}</p>`;
 
+function srcFields(src) {
+  const sm = CALCS[src], sv = store.get(src);
+  return `<div class="full"><b style="font-size:13.5px">Números — ${esc(CTX_LABEL[src])}</b><span class="nota"> (altere aqui; o mesmo valor aparece no módulo de origem)</span></div>` +
+    sm.fields.map((f) => fieldHtml("src-" + src, f, sv).replace("data-k=", "data-sk=")).join("") +
+    `<div class="full"><button class="act" data-resetsrc="${src}">Restaurar exemplo dos números</button></div>`;
+}
 function renderCalc(id) {
   const m = CALCS[id], vals = store.get(id);
-  return `<section class="card" data-calc="${id}">${head(m)}<div class="grid"><div class="fields">${m.fields.map((f) => fieldHtml(id, f, vals)).join("")}<div class="full"><button class="act" data-reset="${id}">Restaurar exemplo</button></div></div><div class="out" aria-live="polite"></div></div></section>`;
+  const extra = id === "gov-msg" ? srcFields(CTX_LABEL[vals.fonte] ? vals.fonte : "high-diag") : "";
+  return `<section class="card" data-calc="${id}">${head(m)}<div class="grid"><div class="fields">${m.fields.map((f) => fieldHtml(id, f, vals)).join("")}${extra}${id === "gov-msg" ? "" : `<div class="full"><button class="act" data-reset="${id}">Restaurar exemplo</button></div>`}</div><div class="out" aria-live="polite"></div></div></section>`;
 }
 function renderTable(id) {
   const t = TABELAS[id];
@@ -365,9 +411,17 @@ function calc(id) {
   const m = CALCS[id], root = $(`[data-calc="${id}"]`);
   const raw = readVals(id, m.fields, root);
   store.set(id, raw);
+  if (id === "gov-msg") { // números da fonte escolhida: gravados no módulo de origem
+    const src = CTX_LABEL[raw.fonte] ? raw.fonte : "high-diag", st = store.get(src);
+    CALCS[src].fields.forEach((f) => { const el = $(`[data-sk="${f.id}"]`, root); if (el) st[f.id] = f.type === "c" ? el.checked : el.value; });
+    store.set(src, st);
+  }
   let html;
   try { html = m.run(raw, P()) || empty(); } catch (e) { console.error(id, e); html = empty(); }
-  $(".out", root).innerHTML = html;
+  const out = $(".out", root);
+  const abertos = [...out.querySelectorAll("details[data-keep]")].map((d) => d.open);
+  out.innerHTML = html;
+  out.querySelectorAll("details[data-keep]").forEach((d, i) => { if (abertos[i]) d.open = true; });
 }
 
 $("#tabs").addEventListener("click", (e) => { const g = e.target.dataset?.g; if (g) { currentGroup = g; store.set("ui", { group: g }); renderTabs(); renderView(); } });
@@ -379,6 +433,7 @@ $("#view").addEventListener("input", (e) => {
 });
 $("#view").addEventListener("change", (e) => {
   const t = e.target;
+  if (t.matches('[data-calc="gov-msg"] [data-k="fonte"]')) { const root = t.closest("[data-calc]"); store.set("gov-msg", readVals("gov-msg", CALCS["gov-msg"].fields, root)); root.outerHTML = renderCalc("gov-msg"); calc("gov-msg"); return; }
   if (t.matches("[data-calc] select, [data-calc] input[type=checkbox], [data-calc] input[type=date]")) { const s = t.closest("[data-calc]"); calc(s.dataset.calc); return; }
   const box = t.closest("[data-chk]");
   if (box && t.matches("input[data-i]")) { const id = box.dataset.chk, st = store.get("chk:" + id); st[t.dataset.i] = t.checked; store.set("chk:" + id, st); box.outerHTML = renderCheck(id); document.querySelector(`[data-chk="${id}"]`).open = true; }
@@ -389,6 +444,7 @@ $("#view").addEventListener("click", (e) => {
   if (t.dataset.copy != null) { navigator.clipboard?.writeText(t.dataset.copy).then(() => (t.textContent = "Copiado ✓")); return; }
   if (t.dataset.copyall) { navigator.clipboard?.writeText(logText(t.dataset.copyall)).then(() => (t.textContent = "Copiado ✓")); return; }
   if (t.dataset.reset) { store.set(t.dataset.reset, {}); renderView(); return; }
+  if (t.dataset.resetsrc) { store.set(t.dataset.resetsrc, {}); renderView(); return; }
   if (t.dataset.resetparams != null) { store.set("params", {}); renderView(); return; }
   if (t.dataset.add) { const id = t.dataset.add, root = $(`[data-log="${id}"]`), e2 = readVals(id, LOGS[id].fields, root); if (!Object.values(e2).some(Boolean)) return; const st = store.get(id); st.entries = [e2, ...(st.entries || [])]; store.set(id, st); renderView(); return; }
   if (t.dataset.del) { const [id, i] = t.dataset.del.split(":"); const st = store.get(id); st.entries.splice(+i, 1); store.set(id, st); renderView(); }
