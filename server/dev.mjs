@@ -6,6 +6,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateKeyPairSync, createSign } from "node:crypto";
 import { MemoryAdapter } from "./memory.js";
+import { ArquivoAdapter } from "./arquivo.js";
 import { Store } from "./store.js";
 import { criarApi } from "./handlers.js";
 import { _limparCacheJwks } from "./auth.js";
@@ -17,7 +18,10 @@ const jwk = { ...publicKey.export({ format: "jwk" }), kid: "dev", alg: "RS256", 
 const b = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const tokenDev = (email) => { const h = b({ alg: "RS256", kid: "dev" }), p = b({ iss: "accounts.google.com", aud: "dev-client", exp: Math.floor(Date.now() / 1000) + 600, email, email_verified: true, name: email.split("@")[0] }); return `${h}.${p}.${createSign("RSA-SHA256").update(`${h}.${p}`).sign(privateKey).toString("base64url")}`; };
 const ENV = { GOOGLE_CLIENT_ID: "dev-client", SESSION_SECRET: "dev".repeat(20), ADMIN_EMAILS: "admin@mantora.com", GOOGLE_SHEET_ID: "dev", GOOGLE_SA_EMAIL: "dev", GOOGLE_SA_PRIVATE_KEY: "dev" };
-export const adaptador = new MemoryAdapter();
+const argv = process.argv;
+const arq = argv.includes("--arquivo") ? argv[argv.indexOf("--arquivo") + 1] : null; // modo local persistente (1 pessoa, 1 computador)
+export const adaptador = arq ? new ArquivoAdapter(arq) : new MemoryAdapter();
+if (arq) ENV.ADMIN_EMAILS = argv.includes("--admin") ? argv[argv.indexOf("--admin") + 1] : ENV.ADMIN_EMAILS;
 const api = criarApi({ env: (k) => ENV[k], criarStore: () => new Store(adaptador, { lockEsperaMs: 5 }), fetchFn: async () => ({ ok: true, json: async () => ({ keys: [jwk] }) }), seguro: false, ttlUsuariosMs: 0 });
 
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml" };
@@ -48,8 +52,9 @@ async function semear() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (process.argv.includes("--seed")) await semear().then(() => console.log("dados de exemplo carregados")); 
+  if (process.argv.includes("--seed") && (!arq || adaptador.vazio)) await semear().then(() => console.log("dados de exemplo carregados"));
   else { _limparCacheJwks(); }
+  if (arq) console.log(`Modo local: os dados ficam em ${arq} (faça cópias desse arquivo como backup).`);
   http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
     try {
@@ -67,6 +72,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       if (!p.startsWith(RAIZ) || p.includes("/.git") || p.includes("/node_modules")) { res.writeHead(403); return res.end(); }
       const dado = await readFile(p); res.writeHead(200, { "content-type": MIME[extname(p)] || "application/octet-stream" }); res.end(dado);
     } catch (e) { res.writeHead(e.code === "ENOENT" ? 404 : 500); res.end(e.code === "ENOENT" ? "não encontrado" : String(e.message)); }
-  }).listen(porta, () => console.log(`dev em http://localhost:${porta}`));
+  }).listen(porta, "127.0.0.1", () => console.log(`Sistema rodando em http://localhost:${porta}  (Ctrl+C para encerrar)`));
 }
 export { semear };
