@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Cascata de Decisão — Mantora Lab</title>
+<style>
+  :root{--bg:#f6f6f3;--card:#fff;--ink:#16181d;--mut:#667085;--line:#e3e4e0;--acc:#3d3dd8;
+    --green:#0f7b4a;--gbg:#e3f5ec;--red:#b42318;--rbg:#fdeceb;--amber:#9a5b00;--abg:#fff3dc;--blue:#1d4ed8;--bbg:#e8efff}
+  @media (prefers-color-scheme:dark){:root{--bg:#101114;--card:#181a1f;--ink:#eceef2;--mut:#98a0ae;--line:#2a2d35;--acc:#8b8bff;
+    --green:#5fd49a;--gbg:#10281d;--red:#ff8a80;--rbg:#2f1513;--amber:#f5b94a;--abg:#2d2208;--blue:#8fb0ff;--bbg:#14203d}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:20px 16px 64px}
+  h1{font-size:22px;margin:0 0 2px} .sub{color:var(--mut);margin:0 0 18px}
+  .principle{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:10px;padding:10px 14px;margin-bottom:18px;font-size:14px}
+  nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:999px;cursor:pointer;font:inherit;font-size:14px}
+  nav button[aria-selected=true]{background:var(--acc);border-color:var(--acc);color:#fff}
+  .grid{display:grid;gap:16px;grid-template-columns:1fr 1fr}
+  @media (max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h2{font-size:15px;margin:0 0 4px} .card .hint{color:var(--mut);font-size:13px;margin:0 0 12px}
+  .fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .fields .full{grid-column:1/-1}
+  label{display:block;font-size:12.5px;color:var(--mut);margin-bottom:3px}
+  input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+  input:focus,select:focus{outline:2px solid var(--acc);outline-offset:1px}
+  .check{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink)} .check input{width:auto}
+  .res{border-radius:12px;padding:14px 16px;border:1px solid var(--line);margin-bottom:12px}
+  .res .tag{display:inline-block;font-weight:700;font-size:13px;letter-spacing:.03em;padding:3px 10px;border-radius:999px;margin-bottom:8px}
+  .res.green{background:var(--gbg)} .res.green .tag{color:var(--green);border:1px solid var(--green)}
+  .res.red{background:var(--rbg)} .res.red .tag{color:var(--red);border:1px solid var(--red)}
+  .res.amber{background:var(--abg)} .res.amber .tag{color:var(--amber);border:1px solid var(--amber)}
+  .res.blue{background:var(--bbg)} .res.blue .tag{color:var(--blue);border:1px solid var(--blue)}
+  .res p{margin:0 0 8px} .res ul{margin:0 0 8px;padding-left:18px;color:var(--mut);font-size:13.5px}
+  .who{font-size:13px} .who b{margin-right:4px}
+  .chip{display:inline-block;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:1px 9px;margin:0 4px 4px 0;font-size:12.5px}
+  .empty{color:var(--mut);font-size:14px;padding:18px;text-align:center;border:1px dashed var(--line);border-radius:12px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px} th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)} th{color:var(--mut);font-weight:600}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
+  .kpi{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px} .kpi small{display:block;color:var(--mut);font-size:12px} .kpi b{font-size:17px}
+  .ok{color:var(--green)} .no{color:var(--red)}
+  button.act{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit;font-size:13.5px}
+  button.act:hover{border-color:var(--acc)}
+  pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;font:13px/1.5 ui-monospace,monospace;margin:8px 0}
+  .foot{margin-top:28px;color:var(--mut);font-size:12.5px}
+  details{margin-top:10px} summary{cursor:pointer;color:var(--acc);font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cascata de Decisão de Tráfego Pago</h1>
+  <p class="sub">Mantora Lab · POP v1.0 · Preencha os dados do funil e receba decisão, diagnóstico, evidências e responsável.</p>
+  <div class="principle"><b>CPA manda.</b> Métrica-mãe decide, secundárias explicam, o funil localiza, o responsável corrige e a próxima rodada aprende.</div>
+  <nav role="tablist" id="tabs"></nav>
+  <div id="view"></div>
+  <p class="foot">Os dados ficam apenas neste navegador (localStorage). Nada é enviado a servidor. Faixas de 1,0x / 1,5–2,0x CPA do Médio Ticket são parâmetros V0 do POP: substitua pelo histórico real do cliente quando houver amostra.</p>
+</div>
+
+<script type="module">
+import * as E from "./engine.js";
+const { brl, AREAS } = E;
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem("cascata:" + k)) || {}; } catch { return {}; } },
+  set(k, v) { try { localStorage.setItem("cascata:" + k, JSON.stringify(v)); } catch {} },
+};
+const n = (v) => (v === "" || v == null ? NaN : Number(String(v).replace(",", ".")));
+const pctFmt = (v) => (Number.isFinite(v) ? (v * 100).toFixed(1).replace(".", ",") + "%" : "—");
+
+// ---- Definição declarativa de cada módulo -------------------------------------------
+// f: [id, rótulo, tipo ("n" número | "c" checkbox | select[...]), valor padrão, largura?]
+const F = (id, label, type = "n", def = "", full = false) => ({ id, label, type, def, full });
+
+const MODULES = [
+  { id: "low-papel", group: "Low Ticket", title: "CPA esperado e plano de teste",
+    hint: "Definido antes da mídia: o papel econômico do low ticket determina o CPA de referência (seção 2 e 4).",
+    fields: [F("ticket", "Ticket do produto principal (R$)", "n", 47), F("papel", "Papel econômico", ["lucro|Produto de lucro (45–50%)", "aquisicao|Produto de aquisição (até 80%)", "checkout|Monetização no checkout (até 100%)"], "lucro"), F("criativos", "Criativos no teste (1 conjunto cada)", "n", 4)],
+    run(d) {
+      const t = n(d.ticket), c = E.cpaEsperadoLow({ ticket: t, papel: d.papel });
+      if (!c) return empty();
+      const p = E.planoTesteAbo({ cpaEsperado: c.sugerido, criativos: n(d.criativos) || 1 });
+      return kpis([["CPA esperado (referência)", brl(c.sugerido)], ["Faixa do papel", `${brl(c.min)} – ${brl(c.max)}`], ["Verba/dia por conjunto", brl(p.verbaDiariaPorConjunto)], ["Verba/dia total", brl(p.verbaDiariaTotal)], ["Investimento janela 3 dias", brl(p.investimentoJanela3d)]]) +
+        note(`${c.ref}. ${p.regra}`) + note("Bumps: entrada óbvia (25–30% de adesão), intermediário (~metade do ticket) e maior valor (piso 5%, excelente 10%). Bumps não salvam produto principal fraco.");
+    } },
+  { id: "low-criativo", group: "Low Ticket", title: "Decisão do criativo (após 3 dias)",
+    hint: "Cascata 0 → 1 → 2–3 → recorrente (seção 5).",
+    fields: [F("cpaEsperado", "CPA esperado (R$)", "n", 23), F("gasto", "Gasto no criativo (R$)", "n", 69), F("vendas", "Vendas na janela", "n", 2)],
+    run: (d) => card(E.decidirCriativoLow({ cpaEsperado: n(d.cpaEsperado), vendas: n(d.vendas), gasto: n(d.gasto) })) },
+  { id: "low-escala", group: "Low Ticket", title: "Escala e deterioração do CPA",
+    hint: "Tendência, não ruído: informe o CPA diário separado por vírgula (mais recente por último) (seções 6 e 7).",
+    fields: [F("cpaEsperado", "CPA esperado (R$)", "n", 23), F("serie", "CPA por dia (ex.: 18, 20, 26, 28)", "t", "18, 20, 26, 28", true)],
+    run: (d) => card(E.decidirEscala({ cpaEsperado: n(d.cpaEsperado), cpaSerie: String(d.serie || "").split(/[;,]/).map(n) })) },
+  { id: "low-diag", group: "Low Ticket", title: "Diagnóstico do funil e roteamento",
+    hint: "Preencha o que tiver. Se o CPA está na meta, preserve; se não, o gargalo é localizado na ordem do funil (seções 8–10).",
+    fields: [F("cpaReal", "CPA real (R$)", "n", 34), F("cpaEsperado", "CPA esperado (R$)", "n", 23), F("ctr", "CTR (%)", "n", 1.8), F("connect", "Connect Rate (%)", "n", 91), F("paginaCheckout", "Página → Checkout (%)", "n", 11), F("checkoutCompra", "Checkout → Compra (%)", "n", ""), F("bumpBarato", "Bump barato (%)", "n", ""), F("bumpMaior", "Bump maior (%)", "n", "")],
+    run(d) {
+      const r = E.diagnosticarLow(d);
+      const rows = (r.leituras || []).map((l) => `<tr><td>${esc(l.label)}</td><td>${l.valor}</td><td>${l.faixa}</td></tr>`).join("");
+      return card(r) + (rows ? `<table><tr><th>Métrica</th><th>Valor</th><th>Faixa</th></tr>${rows}</table>` : "") +
+        msgBox({ modelo: "Low Ticket", meta: `CPA ${brl(n(d.cpaEsperado))}`, atual: `CPA ${brl(n(d.cpaReal))}`, etapa: r.decisao, metricas: r.evidencias, hipotese: r.diagnostico, pedido: "Revisão e retorno com plano de ação", responsaveis: r.responsaveis });
+    } },
+
+  { id: "med-eco", group: "Médio Ticket", title: "Economia pré-funil (CPA/CAC máximo)",
+    hint: "CPA/CAC máximo = receita líquida média − custos variáveis − margem mínima. O alvo fica abaixo do máximo (seção 18).",
+    fields: [F("ticket", "Ticket cheio (R$)", "n", 397), F("descontoPct", "Desconto médio (%)", "n", 0), F("receitaExtraPorComprador", "Bump/upsell médio por comprador (R$)", "n", 0), F("reembolsoPct", "Reembolso (%)", "n", 5), F("custosVariaveis", "Taxas + entrega (R$)", "n", 30), F("custoComercial", "Custo comercial por venda (R$)", "n", 0), F("margemMinima", "Margem mínima na 1ª compra (R$)", "n", 100), F("folgaSeguranca", "Margem de segurança no alvo (%)", "n", 15)],
+    run(d) {
+      const e = E.economiaMedio({ ticket: n(d.ticket), descontoPct: n(d.descontoPct) || 0, receitaExtraPorComprador: n(d.receitaExtraPorComprador) || 0, reembolsoPct: n(d.reembolsoPct) || 0, custosVariaveis: n(d.custosVariaveis) || 0, custoComercial: n(d.custoComercial) || 0, margemMinima: n(d.margemMinima) || 0, folgaSeguranca: (n(d.folgaSeguranca) || 0) / 100 });
+      return kpis([["Receita líquida/comprador", brl(e.receitaLiquida)], ["CPA/CAC máximo", brl(e.max)], ["CPA/CAC alvo", brl(e.alvo)]]) +
+        (e.viavel ? note("Use LTV para aceitar CAC maior apenas com histórico real de recompra/ascensão.") : card({ decisao: "ECONOMIA INVIÁVEL", tom: "red", diagnostico: "Receita líquida não cobre custos e margem mínima. Rever ticket, custos ou papel da oferta antes de subir mídia.", evidencias: [], responsaveis: [AREAS.estrategia, AREAS.especialista] }));
+    } },
+  { id: "med-teste", group: "Médio Ticket", title: "Leitura de teste por múltiplo do CPA",
+    hint: "Com poucas vendas, combine gasto relativo ao CPA-alvo e sinais intermediários (seção 19, parâmetros V0).",
+    fields: [F("cpaAlvo", "CPA-alvo (R$)", "n", 120), F("gasto", "Gasto até agora (R$)", "n", 180), F("vendas", "Vendas", "n", 0), F("sinaisFracos", "Sinais intermediários fracos", "c", false), F("temIntencao", "Há checkout/lead qualificado", "c", false)],
+    run: (d) => card(E.lerTesteMedio({ cpaAlvo: n(d.cpaAlvo), gasto: n(d.gasto), vendas: n(d.vendas) || 0, sinaisFracos: !!d.sinaisFracos, temIntencao: !!d.temIntencao })) },
+  { id: "med-assist", group: "Médio Ticket", title: "Modelo assistido (lead → comercial)",
+    hint: "CAC total = (mídia + custo comercial) ÷ vendas. CPL é só controle (seção 23).",
+    fields: [F("gastoMidia", "Gasto de mídia (R$)", "n", 3000), F("custoComercial", "Custo comercial no período (R$)", "n", 800), F("leads", "Leads", "n", 150), F("contatados", "Contatados", "n", 105), F("qualificados", "Qualificados", "n", 40), F("vendas", "Vendas", "n", 8), F("cacMax", "CAC máximo (R$)", "n", 400)],
+    run(d) { const r = E.cacAssistido({ gastoMidia: n(d.gastoMidia), custoComercial: n(d.custoComercial) || 0, leads: n(d.leads), contatados: n(d.contatados), qualificados: n(d.qualificados), vendas: n(d.vendas), cacMax: n(d.cacMax) }); return card(r); } },
+
+  { id: "high-eco", group: "High Ticket", title: "Economia reversa do funil",
+    hint: "Parte do CAC máximo e volta etapa a etapa com taxas reais do CRM (seção 29). Marque como provisórias as taxas sem histórico.",
+    fields: [F("cacMax", "CAC máximo (R$)", "n", 1500), F("leadVenda", "Lead → venda (%)", "n", 5), F("qualVenda", "Qualificado → venda (%)", "n", 12), F("agendVenda", "Agendamento → venda (%)", "n", 20), F("showVenda", "Comparecimento → venda (%)", "n", 25)],
+    run(d) { const r = E.economiaReversa({ cacMax: n(d.cacMax), leadVenda: n(d.leadVenda), qualVenda: n(d.qualVenda), agendVenda: n(d.agendVenda), showVenda: n(d.showVenda) });
+      return kpis([["CPL máximo", brl(r.cplMax ?? NaN)], ["CPQL máximo", brl(r.cpqlMax ?? NaN)], ["Custo/agendamento máx.", brl(r.custoAgendamentoMax ?? NaN)], ["Custo/comparecimento máx.", brl(r.custoComparecimentoMax ?? NaN)]]) + note("Só confiável com taxas de histórico real ou hipótese explicitamente provisória. Recalibre conforme o CRM acumula volume."); } },
+  { id: "high-diag", group: "High Ticket", title: "Diagnóstico do pipeline comercial",
+    hint: "Localiza a primeira etapa abaixo da meta antes de culpar a mídia (seções 32–35). Metas de etapa em %.",
+    fields: [F("gasto", "Gasto (R$)", "n", 2856), F("cacMax", "CAC máximo (R$)", "n", 1500), F("leads", "Leads", "n", 42), F("contatados", "Contatados", "n", 24), F("qualificados", "Qualificados", "n", 4), F("agendados", "Agendados", "n", 3), F("compareceram", "Compareceram", "n", 2), F("vendas", "Vendas", "n", 0), F("metaContato", "Meta contato (%)", "n", 80), F("metaQualificacao", "Meta qualificação (%)", "n", 35), F("metaAgendamento", "Meta agendamento (%)", "n", 50), F("metaShow", "Meta comparecimento (%)", "n", 65), F("metaFechamento", "Meta fechamento (%)", "n", 25), F("dentroDoCiclo", "Ainda dentro do ciclo médio de venda", "c", false), F("capacidadeSaturada", "Agenda comercial saturada", "c", false)],
+    run(d) { const r = E.diagnosticarHighTicket({ ...Object.fromEntries(Object.entries(d).map(([k, v]) => [k, typeof v === "boolean" ? v : n(v)])) });
+      return card(r) + msgBox({ modelo: "High Ticket", meta: `CAC máx. ${brl(n(d.cacMax))}`, atual: `Gasto ${brl(n(d.gasto))}, ${n(d.leads)} leads, ${n(d.vendas)} venda(s)`, etapa: r.decisao, metricas: r.evidencias, hipotese: r.diagnostico, pedido: "Revisar a etapa indicada antes de aumentar verba", responsaveis: r.responsaveis }); } },
+
+  { id: "lan-proj", group: "Lançamento", title: "Projeção reversa e cenários",
+    hint: "Meta de receita → vendas → leads → orçamento, em três cenários de conversão (seção 39). A meta deve se sustentar no cenário base.",
+    fields: [F("metaReceita", "Meta de receita (R$)", "n", 100000), F("ticket", "Ticket médio efetivo (R$)", "n", 497), F("cacMax", "CAC máximo (R$)", "n", 200), F("cplPlanejado", "CPL planejado (R$)", "n", 3.5), F("convCons", "Conversão lead→venda conservadora (%)", "n", 1), F("convBase", "Conversão base (%)", "n", 2), F("convAgr", "Conversão agressiva (%)", "n", 3)],
+    run(d) { const p = E.projecaoLancamento({ metaReceita: n(d.metaReceita), ticket: n(d.ticket), cacMax: n(d.cacMax), cplPlanejado: n(d.cplPlanejado), conversoes: { Conservador: n(d.convCons), Base: n(d.convBase), Agressivo: n(d.convAgr) } });
+      const rows = p.cenarios.map((c) => `<tr><td>${c.nome} (${c.taxa}%)</td><td>${c.leads.toLocaleString("pt-BR")}</td><td>${brl(c.cplEconomicoMax)}</td><td>${brl(c.orcamento)}</td><td class="${c.cplViavel ? "ok" : "no"}">${c.cplViavel ? "CPL cabe" : "CPL acima do econômico"}</td></tr>`).join("");
+      return kpis([["Vendas necessárias", p.vendas.toLocaleString("pt-BR")]]) + `<table><tr><th>Cenário</th><th>Leads</th><th>CPL econômico máx.</th><th>Orçamento captação</th><th>Leitura</th></tr>${rows}</table>`; } },
+  { id: "lan-ritmo", group: "Lançamento", title: "Ritmo de captação",
+    hint: "Índice de ritmo entre 0,90 e 1,10 ≈ no plano. Cruzado com o CPL define a ação (seções 40–41).",
+    fields: [F("metaLeads", "Meta de leads", "n", 10000), F("leadsAcumulados", "Leads acumulados", "n", 3200), F("diasTotais", "Dias de captação", "n", 14), F("diaAtual", "Dia atual", "n", 6), F("cplAtual", "CPL atual (R$)", "n", 3.1), F("cplMeta", "CPL meta (R$)", "n", 3.5), F("mediaRecente", "Média recente de leads/dia (opcional)", "n", "")],
+    run(d) { const r = E.ritmoCaptacao({ metaLeads: n(d.metaLeads), leadsAcumulados: n(d.leadsAcumulados), diasTotais: n(d.diasTotais), diaAtual: n(d.diaAtual), cplAtual: n(d.cplAtual), cplMeta: n(d.cplMeta), mediaRecente: n(d.mediaRecente) });
+      const m = r.metricas; return card(r) + kpis([["Planejado até hoje", Math.round(m.planejado).toLocaleString("pt-BR")], ["Leads restantes", Math.ceil(m.restantes).toLocaleString("pt-BR")], ["Leads/dia necessários", Math.ceil(m.porDia).toLocaleString("pt-BR")], ["Verba diária necessária", brl(m.verbaDiaria)], ["Projeção final simples", Math.round(m.projecao).toLocaleString("pt-BR")]]); } },
+  { id: "lan-carrinho", group: "Lançamento", title: "Carrinho aberto e remarketing",
+    hint: "Na abertura a prioridade migra de CPL para vendas, CAC e receita por coorte (seções 45–47).",
+    fields: [F("vendas", "Vendas até agora", "n", 120), F("metaVendasAteAgora", "Vendas esperadas até agora", "n", 160), F("cac", "CAC atual (R$)", "n", 180), F("cacMax", "CAC máximo (R$)", "n", 200), F("baseLeads", "Leads na base", "n", 9000), F("cliquesOferta", "Cliques para a página de vendas", "n", 2400), F("checkoutIniciado", "Checkouts iniciados", "n", 520), F("compras", "Compras", "n", 120)],
+    run(d) { const r = E.carrinhoAberto(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, n(v)])));
+      const rows = E.REMARKETING.map((x) => `<tr><td>${x.prioridade} — ${x.nivel}</td><td>${esc(x.publico)}</td><td>${esc(x.mensagem)}</td></tr>`).join("");
+      return card(r) + `<h2 style="font-size:14px;margin:12px 0 6px">Prioridade de remarketing</h2><table><tr><th>Prioridade</th><th>Público</th><th>Mensagem</th></tr>${rows}</table>`; } },
+];
+
+// ---- Renderização -------------------------------------------------------------------
+function empty() { return `<div class="empty">Preencha os campos para ver o resultado.</div>`; }
+function note(t) { return `<p class="hint" style="margin:8px 0">${esc(t)}</p>`; }
+function kpis(list) { return `<div class="kpis">${list.map(([l, v]) => `<div class="kpi"><small>${esc(l)}</small><b>${esc(v)}</b></div>`).join("")}</div>`; }
+function card(r) {
+  const who = (r.responsaveis || []).map((a) => `<span class="chip">${esc(a)}</span>`).join("");
+  return `<div class="res ${r.tom || "blue"}"><span class="tag">${esc(r.decisao)}</span><p>${esc(r.diagnostico)}</p>` +
+    (r.evidencias?.length ? `<ul>${r.evidencias.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : "") +
+    (who ? `<div class="who"><b>Acionar:</b>${who}</div>` : "") + `</div>`;
+}
+function msgBox(p) {
+  const txt = E.mensagemInterna({ ...p, acaoFeita: "" });
+  return `<details><summary>Mensagem para a área acionada (padrão da seção 52)</summary><pre>${esc(txt)}</pre><button class="act" data-copy="${esc(txt)}">Copiar mensagem</button></details>`;
+}
+
+function fieldHtml(m, f, vals) {
+  const v = vals[f.id] ?? f.def;
+  const id = `${m.id}-${f.id}`;
+  if (f.type === "c") return `<label class="check full"><input type="checkbox" id="${id}" data-k="${f.id}" ${v ? "checked" : ""}> ${esc(f.label)}</label>`;
+  if (Array.isArray(f.type)) return `<div><label for="${id}">${esc(f.label)}</label><select id="${id}" data-k="${f.id}">${f.type.map((o) => { const [val, lab] = o.split("|"); return `<option value="${val}" ${v === val ? "selected" : ""}>${esc(lab)}</option>`; }).join("")}</select></div>`;
+  return `<div class="${f.full ? "full" : ""}"><label for="${id}">${esc(f.label)}</label><input id="${id}" data-k="${f.id}" ${f.type === "t" ? 'type="text"' : 'type="text" inputmode="decimal"'} value="${esc(v)}"></div>`;
+}
+
+let currentGroup = store.get("ui").group || "Low Ticket";
+const groups = [...new Set(MODULES.map((m) => m.group))];
+
+function renderTabs() {
+  $("#tabs").innerHTML = groups.map((g) => `<button role="tab" aria-selected="${g === currentGroup}" data-g="${esc(g)}">${esc(g)}</button>`).join("");
+  $("#tabs").onclick = (e) => { const g = e.target.dataset?.g; if (g) { currentGroup = g; store.set("ui", { group: g }); renderTabs(); renderView(); } };
+}
+
+function renderView() {
+  const mods = MODULES.filter((m) => m.group === currentGroup);
+  $("#view").innerHTML = mods.map((m) => {
+    const vals = store.get(m.id);
+    return `<section class="card" style="margin-bottom:16px" data-m="${m.id}"><h2>${esc(m.title)}</h2><p class="hint">${esc(m.hint)}</p>
+      <div class="grid"><div class="fields">${m.fields.map((f) => fieldHtml(m, f, vals)).join("")}<div class="full"><button class="act" data-reset="${m.id}">Restaurar exemplo</button></div></div>
+      <div class="out" aria-live="polite"></div></div></section>`;
+  }).join("");
+  mods.forEach(calc);
+}
+
+function readVals(m, root) {
+  const out = {};
+  m.fields.forEach((f) => { const el = $(`[data-k="${f.id}"]`, root); out[f.id] = f.type === "c" ? el.checked : el.value; });
+  return out;
+}
+function calc(m) {
+  const root = $(`[data-m="${m.id}"]`);
+  const d = readVals(m, root);
+  store.set(m.id, d);
+  let html;
+  try { html = m.run(d) || empty(); } catch (e) { html = empty(); }
+  $(".out", root).innerHTML = html;
+}
+
+$("#view").addEventListener("input", (e) => { const s = e.target.closest("[data-m]"); if (s) calc(MODULES.find((m) => m.id === s.dataset.m)); });
+$("#view").addEventListener("click", (e) => {
+  const c = e.target.dataset?.copy;
+  if (c != null) { navigator.clipboard?.writeText(c).then(() => (e.target.textContent = "Copiado ✓")); return; }
+  const r = e.target.dataset?.reset;
+  if (r) { store.set(r, {}); renderView(); }
+});
+
+renderTabs();
+renderView();
+</script>
+</body>
+</html>
