@@ -2,13 +2,6 @@
   publish = "."
   functions = "netlify/functions"
 
-# A API vive em uma única função; o frontend chama /api/*
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
-  force = true
-
 [functions]
   node_bundler = "esbuild"
 
