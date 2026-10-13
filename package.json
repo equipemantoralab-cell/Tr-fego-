@@ -1,0 +1,12 @@
+{
+  "name": "cascata-mantora",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Cascata de Decisão de Tráfego Pago — sistema interno Mantora (Netlify + Google Sheets)",
+  "scripts": {
+    "test": "node --test test/",
+    "dev": "netlify dev"
+  },
+  "engines": { "node": ">=20" }
+}
