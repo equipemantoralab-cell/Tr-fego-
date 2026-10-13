@@ -1,0 +1,366 @@
+// Calculadora do POP (Cascata de Decisão) — preservada integralmente da versão 1.x.
+// Roda como uma "visão" do sistema; seus rascunhos ficam no localStorage (prefixo "cascata:"), como antes.
+import * as E from "../engine.js";
+import { TABELAS, CHECKLISTS, MOTIVOS_PERDA } from "../content.js";
+
+export function montarCalculadora(raiz) {
+  raiz.innerHTML = `<div class="principle"><b>Métrica-mãe decide. Métricas secundárias explicam. O funil localiza. O responsável corrige. A próxima rodada aprende.</b> CPA manda. Esta é a calculadora do POP: os dados digitados aqui ficam só neste navegador. Para registrar campanhas e decisões compartilhadas, use <b>Nova análise</b>.</div><nav class="abas" role="tablist" id="tabs"></nav><div id="view"></div>`;
+
+
+
+const { brl, AREAS } = E;
+
+const $ = (s, r = raiz) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem("cascata:" + k)) || {}; } catch { return {}; } },
+  set(k, v) { try { localStorage.setItem("cascata:" + k, JSON.stringify(v)); } catch {} },
+};
+const n = (v) => (v === "" || v == null ? NaN : Number(String(v).replace(",", ".")));
+const P = () => store.get("params");
+const today = new Date().toISOString().slice(0, 10);
+const num = (x, d = 0) => (Number.isFinite(x) ? x.toLocaleString("pt-BR", { maximumFractionDigits: d }) : "—");
+
+// F(id, rótulo, tipo, padrão, largura total?) — tipo: "n" número, "t" texto, "a" área de texto, "d" data, "c" checkbox, ["valor|rótulo"] select
+const F = (id, label, type = "n", def = "", full = false) => ({ id, label, type, def, full });
+
+// ---- helpers de saída ---------------------------------------------------------------
+function empty() { return `<div class="empty">Preencha os campos para ver o resultado.</div>`; }
+function note(t) { return `<p class="nota">${esc(t)}</p>`; }
+function kpis(list) { return `<div class="kpis">${list.map(([l, v]) => `<div class="kpi"><small>${esc(l)}</small><b>${esc(v)}</b></div>`).join("")}</div>`; }
+function card(r) {
+  const who = (r.responsaveis || []).map((a) => `<span class="chip">${esc(a)}</span>`).join("");
+  return `<div class="res ${r.tom || "blue"}"><span class="tag">${esc(r.decisao)}</span><p>${esc(r.diagnostico)}</p>` +
+    (r.evidencias?.length ? `<ul>${r.evidencias.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : "") +
+    (who ? `<div class="who"><b>Acionar:</b>${who}</div>` : "") + `</div>`;
+}
+function table(cols, rows) {
+  return `<div class="tw"><table><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></div>`;
+}
+function buildMsg(x, extra = {}) {
+  const r = x.r;
+  return E.mensagemInterna({ modelo: x.modelo, meta: x.meta, atual: x.atual, etapa: r.decisao, metricas: r.evidencias, hipotese: r.diagnostico, hipoteseAlternativa: extra.hipAlt, acaoFeita: extra.acao, pedido: extra.pedido || x.pedido, responsaveis: r.responsaveis });
+}
+function msgBox(x) {
+  const txt = buildMsg(x);
+  return `<details class="sub" data-keep="msg"><summary>Mensagem para a área acionada (padrão da seção 52)</summary><pre>${esc(txt)}</pre><button class="act" data-copy="${esc(txt)}">Copiar mensagem</button></details>`;
+}
+const fmtPct = (v) => (Number.isFinite(v) ? (v * 100).toFixed(1).replace(".", ",") + "%" : "—");
+
+// ---- módulos de cálculo --------------------------------------------------------------
+const bumpFields = [F("b1p", "Bump 1 (barato) — preço (R$)", "n", 9.9), F("b1a", "Bump 1 — adesão (%)", "n", 27), F("b2p", "Bump 2 (intermediário) — preço (R$)", "n", 24), F("b2a", "Bump 2 — adesão (%)", "n", 12), F("b3p", "Bump 3 (maior valor) — preço (R$)", "n", 67), F("b3a", "Bump 3 — adesão (%)", "n", 6)];
+
+const CTX_LABEL = { "low-diag": "Low Ticket — diagnóstico do funil", "med-pagina": "Médio — venda direta por página", "med-vsl": "Médio — VSL", "med-quiz": "Médio — Quiz", "med-assist": "Médio — modelo assistido", "med-hibrido": "Médio — híbrido", "high-diag": "High Ticket — pipeline comercial", "lan-ritmo": "Lançamento — ritmo de captação", "lan-carrinho": "Lançamento — carrinho aberto" };
+
+const CALCS = {
+  "low-papel": { group: "Low Ticket", sec: "2, 4", title: "CPA esperado e plano de teste ABO",
+    hint: "O papel econômico do low ticket define o CPA de referência antes da mídia. Verba diária por conjunto ≈ 1 CPA; janela de 3 dias.",
+    fields: [F("ticket", "Ticket do produto principal (R$)", "n", 47), F("papel", "Papel econômico", ["lucro|Produto de lucro (45–50%)", "aquisicao|Produto de aquisição (até 80%)", "checkout|Monetização no checkout (até 100%)"], "lucro"), F("criativos", "Criativos no teste (1 conjunto cada)", "n", 4)],
+    run(d) {
+      const c = E.cpaEsperadoLow({ ticket: n(d.ticket), papel: d.papel });
+      if (!c) return empty();
+      const p = E.planoTesteAbo({ cpaEsperado: c.sugerido, criativos: n(d.criativos) || 1 });
+      return kpis([["CPA esperado (referência)", brl(c.sugerido)], ["Faixa do papel", `${brl(c.min)} – ${brl(c.max)}`], ["Verba/dia por conjunto", brl(p.verbaDiariaPorConjunto)], ["Verba/dia total", brl(p.verbaDiariaTotal)], ["Investimento janela 3 dias", brl(p.investimentoJanela3d)]]) + note(`${c.ref}. ${p.regra}`);
+    } },
+  "low-bumps": { group: "Low Ticket", sec: "3", title: "Economia dos order bumps",
+    hint: "Ticket médio de carrinho = ticket + Σ preço × adesão. Bumps ampliam a eficiência de um funil que já converte; não substituem produto principal fraco.",
+    fields: [F("ticket", "Ticket do produto principal (R$)", "n", 47), F("cpa", "CPA esperado/real (R$)", "n", 23.5), ...bumpFields],
+    run(d, p) {
+      const r = E.economiaBumps({ ticket: n(d.ticket), cpa: n(d.cpa), bumps: [{ preco: n(d.b1p), adesao: n(d.b1a) }, { preco: n(d.b2p), adesao: n(d.b2a) }, { preco: n(d.b3p), adesao: n(d.b3a) }], cfg: p });
+      if (!Number.isFinite(r.ticketMedio)) return empty();
+      return kpis([["Receita extra por comprador", brl(r.extra)], ["Ticket médio de carrinho", brl(r.ticketMedio)], ["Aumento sobre o ticket", fmtPct(r.aumento)], ["Margem/compra sem bumps", brl(r.margemSemBump)], ["Margem/compra com bumps", brl(r.margemComBump)]]) +
+        `<ul class="nota">${r.ev.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` +
+        (r.margemComBump < 0 ? card({ decisao: "FUNIL TOTAL COM PREJUÍZO", tom: "red", diagnostico: "Mesmo com bumps o ticket médio não cobre o CPA: o funil total precisa continuar sem prejuízo. Revisar CPA-alvo, papel econômico ou oferta.", evidencias: [], responsaveis: [AREAS.estrategia] }) : "");
+    } },
+  "low-criativo": { group: "Low Ticket", sec: "5", title: "Decisão do criativo (após 3 dias)",
+    hint: "Cascata 0 → 1 → 2–3 → recorrente.",
+    fields: [F("cpaEsperado", "CPA esperado (R$)", "n", 23), F("gasto", "Gasto no criativo (R$)", "n", 69), F("vendas", "Vendas na janela", "n", 2)],
+    run: (d, p) => card(E.decidirCriativoLow({ cpaEsperado: n(d.cpaEsperado), vendas: n(d.vendas), gasto: n(d.gasto) }, p)) },
+  "low-escala": { group: "Low Ticket", sec: "6, 7", title: "Escala e deterioração do CPA",
+    hint: "Tendência, não ruído: informe o CPA diário separado por vírgula (mais recente por último).",
+    fields: [F("cpaEsperado", "CPA esperado (R$)", "n", 23), F("serie", "CPA por dia (ex.: 18, 20, 26, 28)", "t", "18, 20, 26, 28", true)],
+    run: (d, p) => card(E.decidirEscala({ cpaEsperado: n(d.cpaEsperado), cpaSerie: String(d.serie || "").split(/[;,]/).map(n) }, p)) },
+  "low-diag": { group: "Low Ticket", sec: "8, 9, 10", title: "Diagnóstico do funil e roteamento",
+    hint: "Preencha o que tiver. Se o CPA está na meta, preserve; se não, o gargalo é localizado na ordem do funil. Ao final, a mensagem para a área acionada.",
+    fields: [F("cpaReal", "CPA real (R$)", "n", 34), F("cpaEsperado", "CPA esperado (R$)", "n", 23), F("cpm", "CPM (R$)", "n", ""), F("ctr", "CTR (%)", "n", 1.8),
+      F("retGancho", "Retenção de gancho", ["|—", "ok|Sem queda inicial relevante", "queda|Queda precoce perceptível", "forte|Abandono forte no início"], ""),
+      F("retCriativo", "Retenção ao longo do criativo", ["|—", "ok|Mantém até o CTA", "queda|Perde atenção no desenvolvimento", "forte|Queda forte antes do CTA"], ""),
+      F("connect", "Connect Rate (%)", "n", 91), F("paginaCheckout", "Página → Checkout (%)", "n", 11), F("checkoutCompra", "Checkout → Compra (%)", "n", ""), F("bumpBarato", "Bump barato (%)", "n", ""), F("bumpMaior", "Bump maior (%)", "n", "")],
+    run(d, p) {
+      const x = CTX["low-diag"](d, p); const r = x.r;
+      const rows = (r.leituras || []).map((l) => [esc(l.label), String(l.valor).replace(".", ","), `<span class="${l.faixa === "abaixo" ? "no" : "ok"}">${l.faixa}</span>`]);
+      return card(r) + (rows.length ? table(["Métrica", "Valor", "Faixa"], rows) : "") +
+        msgBox(x);
+    } },
+
+  "med-eco": { group: "Médio Ticket", sec: "18", title: "Economia pré-funil (CPA/CAC máximo)",
+    hint: "CPA/CAC máximo = receita líquida média − custos variáveis − custo comercial − margem mínima. O alvo fica abaixo do máximo (margem de segurança em Governança → Parâmetros).",
+    fields: [F("ticket", "Ticket cheio (R$)", "n", 397), F("descontoPct", "Desconto médio (%)", "n", 0), F("receitaExtraPorComprador", "Bump/upsell médio por comprador (R$)", "n", 0), F("reembolsoPct", "Reembolso (%)", "n", 5), F("custosVariaveis", "Taxas + entrega (R$)", "n", 30), F("custoComercial", "Custo comercial por venda (R$)", "n", 0), F("margemMinima", "Margem mínima na 1ª compra (R$)", "n", 100)],
+    run(d, p) {
+      const e = E.economiaMedio({ ticket: n(d.ticket), descontoPct: n(d.descontoPct) || 0, receitaExtraPorComprador: n(d.receitaExtraPorComprador) || 0, reembolsoPct: n(d.reembolsoPct) || 0, custosVariaveis: n(d.custosVariaveis) || 0, custoComercial: n(d.custoComercial) || 0, margemMinima: n(d.margemMinima) || 0 }, p);
+      return kpis([["Receita líquida/comprador", brl(e.receitaLiquida)], ["CPA/CAC máximo", brl(e.max)], ["CPA/CAC alvo", brl(e.alvo)]]) +
+        (e.viavel ? note("Use LTV para aceitar CAC maior apenas com histórico real de recompra/ascensão; nunca LTV hipotético.") : card({ decisao: "ECONOMIA INVIÁVEL", tom: "red", diagnostico: "Receita líquida não cobre custos e margem mínima. Rever ticket, custos ou papel da oferta antes de subir mídia.", evidencias: [], responsaveis: [AREAS.estrategia, AREAS.especialista] }));
+    } },
+  "med-teste": { group: "Médio Ticket", sec: "19", title: "Leitura de teste por múltiplo do CPA",
+    hint: "Com poucas vendas, combine gasto relativo ao CPA-alvo e sinais intermediários. Faixas 1,0x / 1,5–2,0x são parâmetros V0 do POP.",
+    fields: [F("cpaAlvo", "CPA-alvo (R$)", "n", 120), F("gasto", "Gasto até agora (R$)", "n", 180), F("vendas", "Vendas", "n", 0), F("sinaisFracos", "Sinais intermediários fracos", "c", false), F("temIntencao", "Há checkout/lead qualificado", "c", false)],
+    run: (d, p) => card(E.lerTesteMedio({ cpaAlvo: n(d.cpaAlvo), gasto: n(d.gasto), vendas: n(d.vendas) || 0, sinaisFracos: !!d.sinaisFracos, temIntencao: !!d.temIntencao }, p)) },
+};
+
+// Diagnóstico por etapas (página, VSL, quiz): real e meta de cada etapa, em %.
+function etapasCalc({ id, sec, title, hint, etapas, ex }) {
+  return { group: "Médio Ticket", sec, title, hint: hint + " As metas de etapa vêm do histórico do cliente (o POP não fixa números); os valores iniciais são só exemplo.",
+    fields: [F("cpaReal", "CPA real (R$)", "n", 190), F("cpaMeta", "CPA-alvo (R$)", "n", 120), ...etapas.flatMap((e, i) => [F(`r${i}`, `${e.nome} — real (%)`, "n", ex[i]?.[0] ?? ""), F(`m${i}`, `${e.nome} — meta (%)`, "n", ex[i]?.[1] ?? "")])],
+    run(d) { const x = CTX[id](d); return card(x.r) + msgBox(x); } };
+}
+CALCS["med-pagina"] = etapasCalc({ id: "med-pagina", sec: "20", title: "Diagnóstico — venda direta por página", hint: "Anúncio → página → checkout → compra.", etapas: E.ETAPAS_PAGINA, ex: [[1.2, 1], [92, 80], [9, 15], [45, 40]] });
+CALCS["med-vsl"] = etapasCalc({ id: "med-vsl", sec: "21", title: "Diagnóstico — VSL", hint: "Descubra em qual trecho a persuasão quebra.", etapas: E.ETAPAS_VSL, ex: [[85, 80], [30, 30], [55, 50], [18, 25], [22, 20], [30, 30], [42, 40]] });
+CALCS["med-quiz"] = etapasCalc({ id: "med-quiz", sec: "22", title: "Diagnóstico — Quiz / diagnóstico", hint: "Cada etapa precisa avançar o usuário.", etapas: E.ETAPAS_QUIZ, ex: [[70, 65], [55, 60], [40, 40], [25, 30], [35, 30]] });
+Object.assign(CALCS, {
+  "med-assist": { group: "Médio Ticket", sec: "23", title: "Modelo assistido (lead → comercial)",
+    hint: "CAC total = (mídia + custo comercial) ÷ vendas. CPL é só controle.",
+    fields: [F("gastoMidia", "Gasto de mídia (R$)", "n", 3000), F("custoComercial", "Custo comercial no período (R$)", "n", 800), F("leads", "Leads", "n", 150), F("contatados", "Contatados", "n", 105), F("qualificados", "Qualificados", "n", 40), F("vendas", "Vendas", "n", 8), F("cacMax", "CAC máximo (R$)", "n", 400)],
+    run(d) { const x = CTX["med-assist"](d); return card(x.r) + msgBox(x); } },
+  "med-hibrido": { group: "Médio Ticket", sec: "24", title: "Modelo híbrido (CPA direto × CAC assistido)",
+    hint: "Separe as duas rotas: misturar tudo em um único CAC esconde o que realmente funciona.",
+    fields: [F("gastoDireto", "Mídia atribuída à venda direta (R$)", "n", 2000), F("vendasDiretas", "Vendas diretas", "n", 14), F("gastoAssistido", "Mídia atribuída à rota assistida (R$)", "n", 1500), F("custoComercial", "Custo comercial (R$)", "n", 600), F("vendasAssistidas", "Vendas assistidas", "n", 6), F("cpaMax", "CPA máximo direto (R$)", "n", 160), F("cacMax", "CAC máximo assistido (R$)", "n", 400)],
+    run(d) { const x = CTX["med-hibrido"](d); return card(x.r) + msgBox(x); } },
+
+  "high-eco": { group: "High Ticket", sec: "29", title: "Economia reversa do funil",
+    hint: "Parte do CAC máximo e volta etapa a etapa com as taxas do CRM. Marque como provisórias as taxas sem histórico.",
+    fields: [F("cacMax", "CAC máximo (R$)", "n", 1500), F("leadVenda", "Lead → venda (%)", "n", 5), F("qualVenda", "Qualificado → venda (%)", "n", 12), F("agendVenda", "Agendamento → venda (%)", "n", 20), F("showVenda", "Comparecimento → venda (%)", "n", 25)],
+    run(d) { const r = E.economiaReversa({ cacMax: n(d.cacMax), leadVenda: n(d.leadVenda), qualVenda: n(d.qualVenda), agendVenda: n(d.agendVenda), showVenda: n(d.showVenda) });
+      return kpis([["CPL máximo", brl(r.cplMax ?? NaN)], ["CPQL máximo", brl(r.cpqlMax ?? NaN)], ["Custo/agendamento máx.", brl(r.custoAgendamentoMax ?? NaN)], ["Custo/comparecimento máx.", brl(r.custoComparecimentoMax ?? NaN)]]) + note("Só confiável com taxas de histórico real ou hipótese explicitamente provisória. Recalibre conforme o CRM acumula volume."); } },
+  "high-diag": { group: "High Ticket", sec: "28, 32–35", title: "Diagnóstico do pipeline comercial",
+    hint: "Localiza a primeira etapa abaixo da meta antes de culpar a mídia. CAC decide; CPL/CPQL/agendamento são previsão e diagnóstico. Metas de etapa em % (histórico do CRM).",
+    fields: [F("gasto", "Gasto (R$)", "n", 2856), F("cacMax", "CAC máximo (R$)", "n", 1500), F("leads", "Leads", "n", 42), F("contatados", "Contatados", "n", 24), F("qualificados", "Qualificados", "n", 4), F("agendados", "Agendados", "n", 3), F("compareceram", "Compareceram", "n", 2), F("vendas", "Vendas", "n", 0), F("metaContato", "Meta contato (%)", "n", 80), F("metaQualificacao", "Meta qualificação (%)", "n", 35), F("metaAgendamento", "Meta agendamento (%)", "n", 50), F("metaShow", "Meta comparecimento (%)", "n", 65), F("metaFechamento", "Meta fechamento (%)", "n", 25), F("dentroDoCiclo", "Ainda dentro do ciclo médio de venda", "c", false), F("capacidadeSaturada", "Agenda comercial saturada", "c", false)],
+    run(d) { const x = CTX["high-diag"](d); return card(x.r) + msgBox(x); } },
+  "high-motivos": { group: "High Ticket", sec: "34", title: "Analisador de motivos de perda",
+    hint: "“Lead ruim” não é diagnóstico: informe quantos leads cada motivo padronizado explica. O agrupamento por área é provisório (o POP não o define).",
+    fields: MOTIVOS_PERDA.map((m, i) => F(m.id, m.label, "n", [8, 5, 2, 1, 6, 12, 3, 4, 1, 3][i])),
+    run(d) { const r = E.analisarMotivosPerda(Object.fromEntries(MOTIVOS_PERDA.map((m) => [m.id, n(d[m.id])])), MOTIVOS_PERDA);
+      if (!r.total) return empty();
+      const max = r.lista[0].n;
+      return table(["Motivo", "Leads", "%", ""], r.lista.map((m) => [esc(m.label), m.n, fmtPct(m.p), `<span class="bar" style="width:${Math.round((m.n / max) * 120)}px"></span>`])) +
+        `<p class="nota"><b>Por destino (provisório):</b> ${r.porArea.map((a) => `${esc(a.area)} ${fmtPct(a.p)}`).join(" · ")}. Aquisição → Tráfego/Copy/Estratégia (ICP, mensagem); Operação comercial → Comercial/Gestão (SLA, cadência); Oferta → Estratégia/Especialista.</p>`; } },
+
+  "lan-proj": { group: "Lançamento", sec: "39", title: "Projeção reversa e cenários",
+    hint: "Meta de receita → vendas → leads → orçamento, em três cenários. A meta deve se sustentar no cenário base.",
+    fields: [F("metaReceita", "Meta de receita (R$)", "n", 100000), F("ticket", "Ticket médio efetivo (R$)", "n", 497), F("cacMax", "CAC máximo (R$)", "n", 200), F("cplPlanejado", "CPL planejado (R$)", "n", 3.5), F("convCons", "Conversão conservadora (%)", "n", 1), F("convBase", "Conversão base (%)", "n", 2), F("convAgr", "Conversão agressiva (%)", "n", 3)],
+    run(d) { const p = E.projecaoLancamento({ metaReceita: n(d.metaReceita), ticket: n(d.ticket), cacMax: n(d.cacMax), cplPlanejado: n(d.cplPlanejado), conversoes: { Conservador: n(d.convCons), Base: n(d.convBase), Agressivo: n(d.convAgr) } });
+      if (!Number.isFinite(p.vendas)) return empty();
+      return kpis([["Vendas necessárias", num(p.vendas)]]) + table(["Cenário", "Leads", "CPL econômico máx.", "Orçamento captação", "Leitura"], p.cenarios.map((c) => [`${c.nome} (${c.taxa}%)`, num(c.leads), brl(c.cplEconomicoMax), brl(c.orcamento), `<span class="${c.cplViavel ? "ok" : "no"}">${c.cplViavel ? "CPL cabe" : "CPL acima do econômico"}</span>`])); } },
+  "lan-ritmo": { group: "Lançamento", sec: "40, 41", title: "Ritmo de captação",
+    hint: "Índice de ritmo entre 0,90 e 1,10 ≈ no plano. Cruzado com o CPL define a ação.",
+    fields: [F("metaLeads", "Meta de leads", "n", 10000), F("leadsAcumulados", "Leads acumulados", "n", 3200), F("diasTotais", "Dias de captação", "n", 14), F("diaAtual", "Dia atual", "n", 6), F("cplAtual", "CPL atual (R$)", "n", 3.1), F("cplMeta", "CPL meta (R$)", "n", 3.5), F("mediaRecente", "Média recente de leads/dia (opcional)", "n", "")],
+    run(d, p) { const x = CTX["lan-ritmo"](d, p); const r = x.r;
+      const m = r.metricas; return card(r) + msgBox(x) + kpis([["Planejado até hoje", num(m.planejado)], ["Leads restantes", num(Math.ceil(m.restantes))], ["Leads/dia necessários", num(Math.ceil(m.porDia))], ["Verba diária necessária", brl(m.verbaDiaria)], ["Projeção final simples", num(m.projecao)]]); } },
+  "lan-origem": { group: "Lançamento", sec: "42, 43, 48", title: "Análise por origem / coorte (CPL × receita)",
+    hint: "Não corte uma origem só pelo CPL: compare custo de lead com receita por lead. Criativo barato com coorte fraca não deve ser premiado; criativo caro com coorte compradora deve ser preservado.",
+    fields: [0, 1, 2, 3, 4].flatMap((i) => { const ex = [["Criativo A", 1800, 500, 14, 8400], ["Criativo B", 1500, 700, 9, 5400], ["Criativo C", 900, 150, 8, 4800], ["", "", "", "", ""], ["", "", "", "", ""]][i];
+      return [F(`o${i}n`, `Origem ${i + 1}`, "t", ex[0]), F(`o${i}g`, "Gasto (R$)", "n", ex[1]), F(`o${i}l`, "Leads", "n", ex[2]), F(`o${i}v`, "Vendas", "n", ex[3]), F(`o${i}r`, "Receita (R$)", "n", ex[4])]; }),
+    run(d) { const r = E.analiseOrigens([0, 1, 2, 3, 4].map((i) => ({ origem: d[`o${i}n`], gasto: n(d[`o${i}g`]), leads: n(d[`o${i}l`]), vendas: n(d[`o${i}v`]), receita: n(d[`o${i}r`]) })));
+      if (!r.linhas.length) return empty();
+      return kpis([["CPL médio", brl(r.mediaCpl)], ["Receita por lead (média)", brl(r.mediaRpl)], ["ROAS geral", r.roasTotal.toFixed(2).replace(".", ",")]]) +
+        table(["Origem", "CPL", "Receita/lead", "CAC", "ROAS", "Decisão"], r.linhas.map((l) => [esc(l.origem), brl(l.cpl), brl(l.rpl), brl(l.cac), l.roas.toFixed(2).replace(".", ","), `<span class="${l.tom === "red" ? "no" : l.tom === "green" ? "ok" : ""}"><b>${l.status}</b></span> — ${esc(l.leitura)}`])); } },
+  "lan-carrinho": { group: "Lançamento", sec: "45, 46, 47", title: "Carrinho aberto",
+    hint: "Na abertura a prioridade migra de CPL para vendas, CAC, conversão e receita por coorte. Campos opcionais habilitam CAC acumulado/marginal, receita por lead e ROAS.",
+    fields: [F("vendas", "Vendas até agora", "n", 120), F("metaVendasAteAgora", "Vendas esperadas até agora", "n", 160), F("cac", "CAC atual (R$)", "n", 180), F("cacMax", "CAC máximo (R$)", "n", 200), F("baseLeads", "Leads na base", "n", 9000), F("cliquesOferta", "Cliques para a página de vendas", "n", 2400), F("checkoutIniciado", "Checkouts iniciados", "n", 520), F("compras", "Compras", "n", 120),
+      F("gastoTotal", "Gasto total (R$) — opcional", "n", 21600), F("receita", "Receita (R$) — opcional", "n", 59640), F("gastoRecente", "Gasto recente (R$) — opcional", "n", 4000), F("vendasRecentes", "Vendas com a verba recente — opcional", "n", 18)],
+    run(d, p) { const x = CTX["lan-carrinho"](d, p); return card(x.r) + msgBox(x); } },
+  "lan-forecast": { group: "Lançamento", sec: "48", title: "Forecast × realizado (pós-lançamento)",
+    hint: "O forecast estava correto? Compare CPL, conversão e ticket projetados com os realizados para calibrar a próxima edição.",
+    fields: [F("pl", "Planejado: leads", "n", 10000), F("pc", "Planejado: CPL (R$)", "n", 3.5), F("pv", "Planejado: conversão lead→venda (%)", "n", 2), F("pt", "Planejado: ticket médio (R$)", "n", 497),
+      F("rl", "Realizado: leads", "n", 11200), F("rc", "Realizado: CPL (R$)", "n", 4.2), F("rv", "Realizado: conversão (%)", "n", 1.4), F("rt", "Realizado: ticket médio (R$)", "n", 460)],
+    run(d) { const r = E.forecastVsRealizado({ plan: { leads: n(d.pl), cpl: n(d.pc), conv: n(d.pv), ticket: n(d.pt) }, real: { leads: n(d.rl), cpl: n(d.rc), conv: n(d.rv), ticket: n(d.rt) } });
+      if (!r.linhas.length) return empty();
+      return table(["Premissa", "Planejado", "Realizado", "Desvio"], r.linhas.map((l) => [l.nome, l.plano, l.real, `<span class="${l.bom ? "ok" : "no"}">${(l.delta * 100).toFixed(1).replace(".", ",")}%</span>`])) +
+        kpis([["Receita planejada", brl(r.receitaPlanejada)], ["Receita implícita no realizado", brl(r.receitaProjetadaPeloReal)]]) + note(r.leitura); } },
+
+  "ap-radar": { group: "Aprendizado", sec: "14", title: "Cascata do radar de demanda emergente",
+    hint: "Demanda crescente + baixa oferta de solução = oportunidade de nova oferta.",
+    fields: [F("crescendo", "O termo/dor está crescendo?", ["sim|Sim", "nao|Não"], "sim"), F("intencao", "Existe intenção de resolver (não só curiosidade)?", ["sim|Sim", "nao|Não"], "sim"), F("solucoes", "Já existem soluções fortes?", ["fortes|Sim, soluções fortes", "poucas|Poucas soluções"], "poucas")],
+    run: (d) => card(E.radarDemanda(d)) },
+  "ap-portfolio": { group: "Aprendizado", sec: "12", title: "Próxima revisão do portfólio (30–45 dias)",
+    hint: "Manter, melhorar, reposicionar ou encerrar ofertas; investigar novas dores; criar novas soluções; evitar dependência de uma única oferta.",
+    fields: [F("ultima", "Data da última revisão", "d", ""), F("hoje", "Hoje", "d", today)],
+    run(d) { if (!d.ultima) return empty(); const r = E.proximaRevisaoPortfolio(d.ultima, d.hoje || today); if (!r) return empty();
+      return kpis([["Dias desde a última", String(r.dias)], ["Janela de revisão", `${r.janelaInicio.split("-").reverse().join("/")} a ${r.janelaFim.split("-").reverse().join("/")}`], ["Situação", r.estado]]); } },
+
+  "gov-msg": { group: "Governança", sec: "52", title: "Gerador de mensagem entre áreas",
+    hint: "Escolha de onde vêm os números e altere-os aqui mesmo: a mensagem é recalculada na hora (meta, resultado, etapa, métricas, hipótese e responsáveis). Evite “a campanha está ruim, o que eu faço?”.",
+    fields: [F("fonte", "Fonte dos números", Object.entries(CTX_LABEL).map(([k, v]) => `${k}|${v}`), "high-diag", true), F("hipAlt", "Hipótese alternativa (opcional)", "t", "", true), F("acao", "Ação já executada (opcional)", "t", "", true), F("pedido", "Pedido claro (em branco = sugerido pelo diagnóstico)", "t", "", true)],
+    run(d, p) { const src = CTX_LABEL[d.fonte] ? d.fonte : "high-diag"; const x = CTX[src](defVals(src), p); const txt = buildMsg(x, { hipAlt: d.hipAlt, acao: d.acao, pedido: d.pedido });
+      return card(x.r) + `<pre>${esc(txt)}</pre><button class="act" data-copy="${esc(txt)}">Copiar mensagem</button>`; } },
+});
+
+
+// Contexto de mensagem de cada módulo: {modelo, meta, atual, pedido, r}. Usado pelo bloco de mensagem do módulo
+// e pelo gerador de Governança, que relê os números do módulo escolhido.
+const nums = (d, ks) => Object.fromEntries(ks.map((k) => [k, n(d[k])]));
+const CTX = {
+  "low-diag": (d, p) => {
+    const dn = { ...d, ...nums(d, ["cpaReal", "cpaEsperado", "cpm", "ctr", "connect", "paginaCheckout", "checkoutCompra", "bumpBarato", "bumpMaior"]) };
+    return { modelo: "Low Ticket", meta: `CPA esperado ${brl(dn.cpaEsperado)}`, atual: `CPA ${brl(dn.cpaReal)}`, pedido: "Revisão e retorno com plano de ação", r: E.diagnosticarLow(dn, p) };
+  },
+  "med-assist": (d) => {
+    const r = E.cacAssistido({ gastoMidia: n(d.gastoMidia), custoComercial: n(d.custoComercial) || 0, leads: n(d.leads), contatados: n(d.contatados), qualificados: n(d.qualificados), vendas: n(d.vendas), cacMax: n(d.cacMax) });
+    return { modelo: "Médio Ticket — modelo assistido", meta: `CAC máx. ${brl(n(d.cacMax))}`, atual: `${n(d.leads)} leads, ${n(d.vendas)} venda(s), CAC ${brl(r.cac)}`, pedido: "Corrigir a etapa de menor taxa antes de escalar mídia", r };
+  },
+  "med-hibrido": (d) => {
+    const r = E.hibrido({ gastoDireto: n(d.gastoDireto), vendasDiretas: n(d.vendasDiretas), gastoAssistido: n(d.gastoAssistido), custoComercial: n(d.custoComercial) || 0, vendasAssistidas: n(d.vendasAssistidas), cpaMax: n(d.cpaMax), cacMax: n(d.cacMax) });
+    return { modelo: "Médio Ticket — híbrido", meta: `CPA máx. direto ${brl(n(d.cpaMax))}; CAC máx. assistido ${brl(n(d.cacMax))}`, atual: `${n(d.vendasDiretas)} vendas diretas e ${n(d.vendasAssistidas)} assistidas`, pedido: "Tratar cada rota separadamente", r };
+  },
+  "high-diag": (d) => {
+    const dn = Object.fromEntries(Object.entries(d).map(([k, v]) => [k, typeof v === "boolean" ? v : n(v)]));
+    return { modelo: "High Ticket", meta: `CAC máx. ${brl(dn.cacMax)}`, atual: `Gasto ${brl(dn.gasto)}, ${dn.leads} leads, ${dn.vendas} venda(s)`, pedido: "Revisar a etapa indicada antes de aumentar verba", r: E.diagnosticarHighTicket(dn) };
+  },
+  "lan-ritmo": (d, p) => {
+    const r = E.ritmoCaptacao({ metaLeads: n(d.metaLeads), leadsAcumulados: n(d.leadsAcumulados), diasTotais: n(d.diasTotais), diaAtual: n(d.diaAtual), cplAtual: n(d.cplAtual), cplMeta: n(d.cplMeta), mediaRecente: n(d.mediaRecente) }, p);
+    return { modelo: "Lançamento — captação", meta: `${num(n(d.metaLeads))} leads em ${n(d.diasTotais)} dias, CPL ${brl(n(d.cplMeta))}`, atual: `${num(n(d.leadsAcumulados))} leads no dia ${n(d.diaAtual)}, CPL ${brl(n(d.cplAtual))}`, pedido: "Executar a ação indicada e recalcular a projeção", r };
+  },
+  "lan-carrinho": (d, p) => {
+    const dn = Object.fromEntries(Object.entries(d).map(([k, v]) => [k, n(v)]));
+    return { modelo: "Lançamento — carrinho aberto", meta: `${dn.metaVendasAteAgora} vendas esperadas, CAC máx. ${brl(dn.cacMax)}`, atual: `${dn.vendas} vendas, CAC ${brl(dn.cac)}`, pedido: "Atuar na etapa indicada", r: E.carrinhoAberto(dn, p) };
+  },
+};
+const etapasCtx = (title, etapas) => (d) => {
+  const r = E.diagnosticarEtapas({ cpaReal: n(d.cpaReal), cpaMeta: n(d.cpaMeta), etapas: etapas.map((e, i) => ({ ...e, real: n(d[`r${i}`]), meta: n(d[`m${i}`]) })) });
+  return { modelo: `Médio Ticket — ${title}`, meta: `CPA-alvo ${brl(n(d.cpaMeta))}`, atual: `CPA ${brl(n(d.cpaReal))}`, pedido: "Revisão da etapa indicada", r };
+};
+CTX["med-pagina"] = etapasCtx("venda direta por página", E.ETAPAS_PAGINA);
+CTX["med-vsl"] = etapasCtx("VSL", E.ETAPAS_VSL);
+CTX["med-quiz"] = etapasCtx("Quiz / diagnóstico", E.ETAPAS_QUIZ);
+const defVals = (id) => { const st = store.get(id); return Object.fromEntries(CALCS[id].fields.map((f) => [f.id, st[f.id] ?? f.def])); };
+
+// Logs (registro de aprendizados e benchmark)
+const LOGS = {
+  "ap-log": { group: "Aprendizado", sec: "11, 48", title: "Registro de aprendizados por leva",
+    hint: "Registre aprendizagens, não só “vencedor/perdedor”. Para criativo com CPA abaixo da meta, decomponha hook, mecanismo, promessa, prova, formato e CTA.",
+    fields: [F("leva", "Leva / data", "t", "", true), F("criativo", "Criativo", "t", ""), F("resultado", "Resultado (CPA, vendas)", "t", ""), F("hook", "Hook", "t", ""), F("mecanismo", "Mecanismo", "t", ""), F("promessa", "Promessa", "t", ""), F("prova", "Prova", "t", ""), F("formato", "Formato", "t", ""), F("cta", "CTA", "t", ""), F("aprendizado", "Aprendizado / próxima hipótese", "a", "", true)], titleKey: "leva" },
+  "ap-bench": { group: "Aprendizado", sec: "13", title: "Registro de benchmark competitivo",
+    hint: "O objetivo não é copiar o concorrente: é entender o padrão do mercado e como superá-lo.",
+    fields: [F("concorrente", "Concorrente / oferta", "t", "", true), F("promessa", "Problema e promessa", "a", "", true), F("oferta", "Ticket, formato, módulos, bônus e garantia", "a", "", true), F("monetizacao", "Order bumps, upsells e monetização", "a", "", true), F("criativos", "Criativos, argumentos, linguagem e provas", "a", "", true), F("percepcao", "Percepção de profundidade, facilidade, velocidade e qualidade", "a", "", true), F("superar", "Como superar (especificidade, método, suporte, integração com a esteira)", "a", "", true)], titleKey: "concorrente" },
+};
+
+// ---- Estrutura das abas ---------------------------------------------------------------
+const TABS = {
+  "Low Ticket": [["c", "low-papel"], ["c", "low-bumps"], ["c", "low-criativo"], ["c", "low-escala"], ["c", "low-diag"], ["t", "papelLow"], ["t", "bumps"], ["t", "testeAbo"], ["t", "cascata3d"], ["t", "preEscala"], ["t", "deterioracao"], ["t", "metricasLow"], ["t", "sinaisLow"], ["t", "roteamento"], ["t", "fluxoLow"]],
+  "Médio Ticket": [["t", "medioArq"], ["c", "med-eco"], ["t", "medioPreFunil"], ["c", "med-teste"], ["t", "medioTeste"], ["c", "med-pagina"], ["t", "medioPagina"], ["c", "med-vsl"], ["t", "vsl"], ["c", "med-quiz"], ["t", "quiz"], ["c", "med-assist"], ["k", "medioComercialSLA"], ["t", "comercialMedio"], ["c", "med-hibrido"], ["t", "hibrido"], ["t", "medioEscala"], ["t", "medioSinais"], ["t", "fluxoMedio"]],
+  "High Ticket": [["c", "high-eco"], ["t", "highEcoRef"], ["k", "highDados"], ["c", "high-diag"], ["c", "high-motivos"], ["k", "highQualidade"], ["t", "highArq"], ["t", "highJanela"], ["t", "highCascata"], ["t", "highEscala"], ["t", "highCadencia"], ["t", "fluxoHigh"]],
+  "Lançamento": [["t", "lanProj"], ["c", "lan-proj"], ["c", "lan-ritmo"], ["t", "lanRitmoMatriz"], ["k", "lanQualidade"], ["c", "lan-origem"], ["t", "lanCriativos"], ["k", "lanAquecimento"], ["t", "lanCarrinhoMetricas"], ["c", "lan-carrinho"], ["t", "lanCarrinho"], ["t", "remarketing"], ["c", "lan-forecast"], ["t", "posLancamento"], ["t", "fluxoLancamento"]],
+  "Aprendizado": [["l", "ap-log"], ["t", "inteligencia"], ["c", "ap-portfolio"], ["k", "portfolio"], ["l", "ap-bench"], ["k", "benchmark"], ["c", "ap-radar"], ["k", "radarSinais"]],
+  "Governança": [["t", "objetivo"], ["k", "rapidaGestor"], ["k", "finalDecisao"], ["c", "gov-msg"], ["t", "hierarquia"], ["t", "quemDecide"], ["t", "roteamento"], ["t", "cadenciaTime"], ["p", "params"]],
+};
+const groups = Object.keys(TABS);
+let currentGroup = store.get("ui").group;
+if (!groups.includes(currentGroup)) currentGroup = groups[0];
+
+// ---- Renderização ---------------------------------------------------------------------
+function fieldHtml(id, f, vals) {
+  const v = vals[f.id] ?? f.def;
+  const fid = `${id}-${f.id}`;
+  if (f.type === "c") return `<label class="check full"><input type="checkbox" id="${fid}" data-k="${f.id}" ${v ? "checked" : ""}> ${esc(f.label)}</label>`;
+  if (Array.isArray(f.type)) return `<div class="${f.full ? "full" : ""}"><label for="${fid}">${esc(f.label)}</label><select id="${fid}" data-k="${f.id}">${f.type.map((o) => { const [val, lab] = o.split("|"); return `<option value="${val}" ${v === val ? "selected" : ""}>${esc(lab)}</option>`; }).join("")}</select></div>`;
+  if (f.type === "a") return `<div class="${f.full ? "full" : ""}"><label for="${fid}">${esc(f.label)}</label><textarea id="${fid}" data-k="${f.id}">${esc(v)}</textarea></div>`;
+  const attrs = f.type === "n" ? 'type="text" inputmode="decimal"' : f.type === "d" ? 'type="date"' : 'type="text"';
+  return `<div class="${f.full ? "full" : ""}"><label for="${fid}">${esc(f.label)}</label><input id="${fid}" data-k="${f.id}" ${attrs} value="${esc(v)}"></div>`;
+}
+const head = (m) => `<h2><span class="sec">§ ${esc(m.sec)}</span>${esc(m.title)}</h2><p class="hint">${esc(m.hint || "")}</p>`;
+
+function srcFields(src) {
+  const sm = CALCS[src], sv = store.get(src);
+  return `<div class="full"><b style="font-size:13.5px">Números — ${esc(CTX_LABEL[src])}</b><span class="nota"> (altere aqui; o mesmo valor aparece no módulo de origem)</span></div>` +
+    sm.fields.map((f) => fieldHtml("src-" + src, f, sv).replace("data-k=", "data-sk=")).join("") +
+    `<div class="full"><button class="act" data-resetsrc="${src}">Restaurar exemplo dos números</button></div>`;
+}
+function renderCalc(id) {
+  const m = CALCS[id], vals = store.get(id);
+  const extra = id === "gov-msg" ? srcFields(CTX_LABEL[vals.fonte] ? vals.fonte : "high-diag") : "";
+  return `<section class="card" data-calc="${id}">${head(m)}<div class="grid"><div class="fields">${m.fields.map((f) => fieldHtml(id, f, vals)).join("")}${extra}${id === "gov-msg" ? "" : `<div class="full"><button class="act" data-reset="${id}">Restaurar exemplo</button></div>`}</div><div class="out" aria-live="polite"></div></div></section>`;
+}
+function renderTable(id) {
+  const t = TABELAS[id];
+  const filtro = t.filtro ? `<input class="filtro" type="search" placeholder="Filtrar sinais…" data-filter aria-label="Filtrar">` : "";
+  return `<details class="card" data-tbl="${id}"><summary><span class="sec">§ ${esc(t.sec)}</span>${esc(t.titulo)}</summary>${filtro}${table(t.cols, t.rows.map((r) => r.map(esc)))}${t.nota ? `<p class="nota">${esc(t.nota)}</p>` : ""}</details>`;
+}
+function renderCheck(id) {
+  const c = CHECKLISTS[id], st = store.get("chk:" + id);
+  const feitos = c.itens.filter((_, i) => st[i]).length;
+  const problema = c.modo === "problema";
+  let out;
+  if (problema) { const fracos = c.itens.filter((_, i) => st[i]); out = fracos.length ? `<ul>${fracos.map((i) => `<li><b>Ação:</b> ${esc(i.a)} <span class="nota">(${esc(i.t.split(" — ")[0])})</span></li>`).join("")}</ul>` : `<p class="nota">Nenhum ponto fraco marcado.</p>`; }
+  else out = `<div class="prog"><i style="width:${Math.round((feitos / c.itens.length) * 100)}%"></i></div><p class="nota">${feitos}/${c.itens.length} atendidos${feitos < c.itens.length ? ` — pendentes: ${c.itens.map((i, k) => (st[k] ? null : i.t)).filter(Boolean).length}` : " — pronto para decidir."}</p>`;
+  return `<details class="card" data-chk="${id}" ${feitos ? "open" : ""}><summary><span class="sec">§ ${esc(c.sec)}</span>${esc(c.titulo)}</summary>${c.itens.map((it, i) => `<label class="check"><input type="checkbox" data-i="${i}" ${st[i] ? "checked" : ""}> ${esc(it.t)}</label>`).join("")}<div class="chk-out">${out}</div>${c.nota ? `<p class="nota">${esc(c.nota)}</p>` : ""}</details>`;
+}
+function renderLog(id) {
+  const m = LOGS[id], st = store.get(id), entries = st.entries || [];
+  return `<section class="card" data-log="${id}">${head(m)}<div class="fields">${m.fields.map((f) => fieldHtml(id, f, {})).join("")}<div class="full"><button class="act" data-add="${id}">Adicionar registro</button> <button class="act" data-copyall="${id}">Copiar todos</button></div></div>
+    <div style="margin-top:12px">${entries.length ? entries.map((e, i) => `<div class="entry"><b>${esc(e[m.titleKey] || "(sem título)")}</b>${m.fields.filter((f) => f.id !== m.titleKey && e[f.id]).map((f) => `<div><span style="color:var(--mut)">${esc(f.label)}:</span> ${esc(e[f.id])}</div>`).join("")}<button class="act" data-del="${id}:${i}" style="margin-top:6px">Remover</button></div>`).join("") : `<div class="empty">Nenhum registro ainda.</div>`}</div></section>`;
+}
+function renderParams() {
+  const vals = P();
+  return `<details class="card" open><summary>Parâmetros (POP × provisório)</summary><p class="hint">Valores do POP aparecem como <span class="chip pop">POP</span>. Onde o documento não define o número, o valor é <span class="chip prov">provisório</span> e deve ser substituído pelo histórico real do cliente.</p>
+    <div class="fields" data-params>${E.PARAMS.map((p) => `<div><label for="par-${p.id}">${esc(p.label)} <span class="chip ${p.fonte === "POP" ? "pop" : "prov"}">${p.fonte === "POP" ? "POP" : "provisório"}</span> <span class="sec">§${esc(p.sec)}</span></label><input id="par-${p.id}" data-p="${p.id}" type="text" inputmode="decimal" value="${esc(vals[p.id] ?? p.def)}">${p.nota ? `<span class="nota">${esc(p.nota)}</span>` : ""}</div>`).join("")}<div class="full"><button class="act" data-resetparams>Restaurar padrões</button></div></div></details>`;
+}
+
+function renderTabs() {
+  $("#tabs").innerHTML = groups.map((g) => `<button role="tab" aria-selected="${g === currentGroup}" data-g="${esc(g)}">${esc(g)}</button>`).join("");
+}
+function renderView() {
+  $("#view").innerHTML = TABS[currentGroup].map(([k, id]) => ({ c: renderCalc, t: renderTable, k: renderCheck, l: renderLog, p: renderParams })[k](id)).join("");
+  raiz.querySelectorAll("[data-calc]").forEach((s) => calc(s.dataset.calc));
+}
+
+function readVals(id, fields, root) {
+  const out = {};
+  fields.forEach((f) => { const el = $(`[data-k="${f.id}"]`, root); if (el) out[f.id] = f.type === "c" ? el.checked : el.value; });
+  return out;
+}
+function calc(id) {
+  const m = CALCS[id], root = $(`[data-calc="${id}"]`);
+  const raw = readVals(id, m.fields, root);
+  store.set(id, raw);
+  if (id === "gov-msg") { // números da fonte escolhida: gravados no módulo de origem
+    const src = CTX_LABEL[raw.fonte] ? raw.fonte : "high-diag", st = store.get(src);
+    CALCS[src].fields.forEach((f) => { const el = $(`[data-sk="${f.id}"]`, root); if (el) st[f.id] = f.type === "c" ? el.checked : el.value; });
+    store.set(src, st);
+  }
+  let html;
+  try { html = m.run(raw, P()) || empty(); } catch (e) { console.error(id, e); html = empty(); }
+  const out = $(".out", root);
+  const abertos = [...out.querySelectorAll("details[data-keep]")].map((d) => d.open);
+  out.innerHTML = html;
+  out.querySelectorAll("details[data-keep]").forEach((d, i) => { if (abertos[i]) d.open = true; });
+}
+
+$("#tabs").addEventListener("click", (e) => { const g = e.target.dataset?.g; if (g) { currentGroup = g; store.set("ui", { group: g }); renderTabs(); renderView(); } });
+$("#view").addEventListener("input", (e) => {
+  const t = e.target;
+  if (t.matches("[data-p]")) { const p = P(); p[t.dataset.p] = t.value; store.set("params", p); return; }
+  if (t.matches("[data-filter]")) { const q = t.value.toLowerCase(); t.closest("details").querySelectorAll("tr:not(:first-child)").forEach((tr) => (tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none")); return; }
+  const s = t.closest("[data-calc]"); if (s) calc(s.dataset.calc);
+});
+$("#view").addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.matches('[data-calc="gov-msg"] [data-k="fonte"]')) { const root = t.closest("[data-calc]"); store.set("gov-msg", readVals("gov-msg", CALCS["gov-msg"].fields, root)); root.outerHTML = renderCalc("gov-msg"); calc("gov-msg"); return; }
+  if (t.matches("[data-calc] select, [data-calc] input[type=checkbox], [data-calc] input[type=date]")) { const s = t.closest("[data-calc]"); calc(s.dataset.calc); return; }
+  const box = t.closest("[data-chk]");
+  if (box && t.matches("input[data-i]")) { const id = box.dataset.chk, st = store.get("chk:" + id); st[t.dataset.i] = t.checked; store.set("chk:" + id, st); box.outerHTML = renderCheck(id); raiz.querySelector(`[data-chk="${id}"]`).open = true; }
+});
+function logText(id) { const m = LOGS[id]; return (store.get(id).entries || []).map((e) => m.fields.filter((f) => e[f.id]).map((f) => `${f.label}: ${e[f.id]}`).join("\n")).join("\n\n---\n\n"); }
+$("#view").addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.dataset.copy != null) { navigator.clipboard?.writeText(t.dataset.copy).then(() => (t.textContent = "Copiado ✓")); return; }
+  if (t.dataset.copyall) { navigator.clipboard?.writeText(logText(t.dataset.copyall)).then(() => (t.textContent = "Copiado ✓")); return; }
+  if (t.dataset.reset) { store.set(t.dataset.reset, {}); renderView(); return; }
+  if (t.dataset.resetsrc) { store.set(t.dataset.resetsrc, {}); renderView(); return; }
+  if (t.dataset.resetparams != null) { store.set("params", {}); renderView(); return; }
+  if (t.dataset.add) { const id = t.dataset.add, root = $(`[data-log="${id}"]`), e2 = readVals(id, LOGS[id].fields, root); if (!Object.values(e2).some(Boolean)) return; const st = store.get(id); st.entries = [e2, ...(st.entries || [])]; store.set(id, st); renderView(); return; }
+  if (t.dataset.del) { const [id, i] = t.dataset.del.split(":"); const st = store.get(id); st.entries.splice(+i, 1); store.set(id, st); renderView(); }
+});
+
+renderTabs();
+renderView();
+
+}

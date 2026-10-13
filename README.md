@@ -1,9 +1,15 @@
-# Cascata de Decisão de Tráfego Pago — Mantora Lab
+# Cascata de Decisão de Tráfego Pago — Mantora
 
-Calculadora do POP v1.0 (Low Ticket, Médio Ticket, High Ticket e Lançamento): você informa os dados do funil e recebe decisão, diagnóstico, evidências e responsável.
+Sistema interno de gestão, diagnóstico e acompanhamento de campanhas de tráfego pago.
+**Métrica-mãe decide. Métricas secundárias explicam. O funil localiza. O responsável corrige. A próxima rodada aprende.**
 
-- Sem backend e sem banco: dados só no navegador (localStorage).
-- `index.html` — interface; `engine.js` — motor puro (regras do POP); `content.js` — tabelas, checklists e fluxos transcritos do POP.
-- Números que o POP não define são marcados como *provisórios* e editáveis em Governança → Parâmetros.
-- Precisa ser servido por HTTP (ex.: `python3 -m http.server`, GitHub Pages ou Netlify); não abre via `file://`.
-- Testes: `node --test test/engine.test.mjs`
+- Dashboard operacional, clientes, campanhas, análises, cascata de decisão (motor de regras + calculadora do POP), simulador financeiro, plano de ação, histórico/inteligência e configurações.
+- Dados compartilhados no **Google Sheets** (via Netlify Function); login Google com perfis (admin, gestor, analista, leitor).
+- Entrada manual de dados; sem integração com Meta Ads, ClickUp ou plataformas de anúncios.
+
+Documentação: [`docs/SETUP.md`](docs/SETUP.md) · [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) · [`docs/TESTES.md`](docs/TESTES.md) · [`docs/PUBLICACAO.md`](docs/PUBLICACAO.md) · [`docs/AUDITORIA.md`](docs/AUDITORIA.md)
+
+```
+npm test                      # testes automatizados
+node server/dev.mjs --seed    # ambiente local com planilha em memória (não usar em produção)
+```

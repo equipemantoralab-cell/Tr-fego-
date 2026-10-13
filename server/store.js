@@ -10,6 +10,7 @@ export class ErroNegocio extends Error { constructor(msg, status = 400, extra = 
 export class Validacao extends ErroNegocio { constructor(erros) { super(erros.join("; "), 422, { erros }); this.name = "Validacao"; } }
 export class NaoEncontrado extends ErroNegocio { constructor(t, id) { super(`${t} ${id} não encontrado`, 404); this.name = "NaoEncontrado"; } }
 export class Conflito extends ErroNegocio { constructor(atual, msg) { super(msg || "O registro foi alterado por outra pessoa. Recarregue e tente de novo.", 409, { atual }); this.name = "Conflito"; } }
+export class PlanilhaNaoPreparada extends ErroNegocio { constructor(aba) { super(`A planilha ainda não foi preparada${aba ? ` (aba ${aba} ausente)` : ""}. Um administrador deve executar “Preparar planilha”.`, 409, { codigo: "planilha_nao_preparada" }); this.name = "PlanilhaNaoPreparada"; } }
 export class RecursoOcupado extends ErroNegocio { constructor() { super("Outra gravação está em andamento neste registro. Tente novamente em instantes.", 503); this.name = "RecursoOcupado"; } }
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -24,7 +25,7 @@ export class Store {
   async _ler(tabela) {
     const def = TABELAS[tabela];
     const { headers, linhas } = await this.a.lerTudo(def.aba);
-    if (!headers) throw new ErroNegocio(`Aba ${def.aba} não existe. Execute a configuração inicial (admin).`, 500);
+    if (!headers) throw new PlanilhaNaoPreparada(def.aba);
     return { headers, linhas };
   }
   _objs(tabela, headers, linhas) {
@@ -39,7 +40,8 @@ export class Store {
     const out = {};
     for (const t of tabelas) {
       const { headers, linhas } = r[TABELAS[t].aba];
-      out[t] = headers ? this._objs(t, headers, linhas).map(({ __linha, ...o }) => o) : [];
+      if (!headers) throw new PlanilhaNaoPreparada(TABELAS[t].aba);
+      out[t] = this._objs(t, headers, linhas).map(({ __linha, ...o }) => o);
     }
     return out;
   }

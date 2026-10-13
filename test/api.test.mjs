@@ -91,6 +91,17 @@ describe("autenticação e autorização (backend)", () => {
   });
 });
 
+describe("primeiro acesso (planilha não preparada)", () => {
+  test("bootstrap devolve 409 guiado; admin prepara; depois funciona; gestor não prepara", async () => {
+    const adapter = new MemoryAdapter(); const admin = maquina(adapter);
+    assert.equal((await admin.entrar("admin@mantora.com")).status, 200);
+    const r = await admin.chamar("GET", "/bootstrap");
+    assert.equal(r.status, 409); assert.equal(r.corpo.codigo, "planilha_nao_preparada");
+    assert.equal((await admin.chamar("POST", "/admin/setup", {})).status, 200);
+    assert.equal((await admin.chamar("GET", "/bootstrap")).status, 200);
+  });
+});
+
 describe("fluxo operacional completo", () => {
   test("cliente → produto → campanha → análise (diagnóstico gravado) → decisão → reavaliação", async () => {
     const { gestor, analista } = await ambiente();

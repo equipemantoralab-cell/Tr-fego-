@@ -109,6 +109,27 @@ describe("LOW TICKET", () => {
   });
 });
 
+describe("conversão não informada (não distorce o acumulado)", () => {
+  test("período atual sem compras → insuficiente, mesmo havendo histórico com compras", () => {
+    const h = [ana({ id: "a1", periodo_fim: "2026-03-04", investimento: 130, compras: 5, ...FUNIL })];
+    const r = run(camp(), ana({ id: "a2", periodo_inicio: "2026-03-05", periodo_fim: "2026-03-09", investimento: 200, ...FUNIL }), h);
+    assert.equal(r.situacao, "insuficiente"); assert.equal(r.recomendacao.acao, "continuar_teste"); assert.ok(r.regras.includes("DADOS-CONVERSAO"));
+  });
+  test("análise ANTERIOR sem compras é excluída do acumulado (e avisado)", () => {
+    const h = [ana({ id: "a1", periodo_fim: "2026-03-04", investimento: 5000, ...FUNIL })];
+    const r = run(camp(), ana({ id: "a2", periodo_inicio: "2026-03-05", periodo_fim: "2026-03-09", investimento: 130, compras: 5, receita: 470, ...FUNIL }), h);
+    assert.equal(r.acumulado.investimento, 130); assert.ok(r.avisos.some((a) => /excluída/.test(a)));
+  });
+  test("zero explícito continua valendo como zero", () => {
+    const r = run(camp(), ana({ investimento: 120, compras: 0, ...FUNIL }));
+    assert.equal(r.recomendacao.acao, "pausar");
+  });
+  test("leads: período sem leads informados → insuficiente", () => {
+    const r = run(camp({ tipo_funil: "medio_ticket", modelo_funil: "leads", cpl_alvo: 10, cpa_alvo: null }), ana({ investimento: 500, ...FUNIL }));
+    assert.equal(r.situacao, "insuficiente"); assert.ok(r.regras.includes("DADOS-CONVERSAO"));
+  });
+});
+
 describe("MÉDIO TICKET", () => {
   const C = (o = {}) => camp({ tipo_funil: "medio_ticket", modelo_funil: "pagina", cpa_alvo: 150, ...o });
   test("gasto < 1 CPA e sem vendas → aguardar", () => {

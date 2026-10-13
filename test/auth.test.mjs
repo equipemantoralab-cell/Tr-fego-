@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, createSign } from "node:crypto";
 import { verificarIdTokenGoogle, criarSessao, lerSessao, lerCookie, cookieSessao, _limparCacheJwks } from "../server/auth.js";
-import { permitido } from "../server/authz.js";
+import { permitido } from "../lib/authz.js";
 
 const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "k1", alg: "RS256", use: "sig" };

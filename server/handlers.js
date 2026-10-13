@@ -1,10 +1,10 @@
 // Rotas da API. Independente de plataforma: recebe {metodo, caminho, query, corpo, cookie, headers} e devolve {status, corpo, cookies}.
 // Toda leitura e escrita da planilha passa por aqui — nenhuma rota é aberta sem sessão válida (exceto config/saúde/login).
 import { createHash } from "node:crypto";
-import { Store, ErroNegocio, Validacao, Conflito, NaoEncontrado } from "./store.js";
+import { Store, ErroNegocio, Validacao, Conflito, NaoEncontrado, PlanilhaNaoPreparada } from "./store.js";
 import { IndisponivelError } from "./memory.js";
 import { verificarIdTokenGoogle, criarSessao, lerSessao, lerCookie, cookieSessao, cookieLimpo, ErroAuth } from "./auth.js";
-import { permitido } from "./authz.js";
+import { permitido } from "../lib/authz.js";
 import { TABELAS, validarRegistro } from "../lib/schema.js";
 import { normalizarBase, derivar, avisosConsistencia, CAMPOS_BASE } from "../lib/metrics.js";
 import { diagnosticar, VERSAO_MOTOR } from "../lib/rules.js";
@@ -280,7 +280,9 @@ export function criarApi(deps) {
     if (e instanceof Validacao) return resp(422, { ok: false, erro: e.message, codigo: "validacao", erros: e.erros });
     if (e instanceof NaoEncontrado) return resp(404, { ok: false, erro: e.message, codigo: "nao_encontrado" });
     if (e instanceof ErroAuth) return resp(e.status, { ok: false, erro: e.message, codigo: "auth" });
+    if (e instanceof PlanilhaNaoPreparada) return resp(409, { ok: false, erro: e.message, codigo: "planilha_nao_preparada" });
     if (e instanceof ErroNegocio) return resp(e.status, { ok: false, erro: e.message, codigo: e.name });
+    if (e?.status === 400 && /Unable to parse range|not found/i.test(e.message || "")) return resp(409, { ok: false, erro: "A planilha ainda não foi preparada (abas ausentes). Um administrador deve executar “Preparar planilha”.", codigo: "planilha_nao_preparada" });
     if (e instanceof IndisponivelError) return resp(503, { ok: false, erro: "A planilha (Google Sheets) está indisponível no momento. Seus dados não foram alterados; tente novamente em instantes.", codigo: "planilha_indisponivel" });
     if (e?.name === "AcessoNegadoSheets") return resp(502, { ok: false, erro: "O servidor não conseguiu acessar a planilha. Verifique se ela foi compartilhada com a conta de serviço.", codigo: "planilha_sem_acesso" });
     console.error("erro inesperado:", e?.stack || e);
