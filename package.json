@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Cascata de Decisão de Tráfego Pago — sistema interno Mantora (Netlify + Google Sheets)",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.mjs",
     "dev": "netlify dev"
   },
   "engines": { "node": ">=20" }
