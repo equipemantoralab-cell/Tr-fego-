@@ -24,3 +24,16 @@ Calculadora do POP v1.0 (Low Ticket, Médio Ticket, High Ticket e Lançamento): 
 ### Próxima etapa para comercialização
 
 Esta versão continua local, sem login, cobrança ou sincronização entre usuários/dispositivos. Para comercializar como plataforma compartilhada, a próxima etapa é adicionar contas e organizações, permissões por cliente, banco de dados com isolamento por organização, histórico de alterações e gestão de assinatura. O backup atual permite validar o uso interno antes dessa evolução.
+
+## Navegação por jornada
+
+A navegação agora segue oito páginas: **Visão geral**, **Clientes e campanhas**, **Planejamento**, **Análise da campanha**, **Plano de ação**, **Testes e aprendizados**, **Relatórios** e **Configurações**.
+
+- O modelo de funil é escolhido no cadastro da campanha. Planejamento e análise exibem somente as ferramentas correspondentes; referências e checklists ficam em Configurações.
+- Campanhas novas começam sem números de exemplo. O botão de demonstração cria uma campanha separada com exemplos. Dados de campanhas anteriores permanecem disponíveis, com aviso para conferir o cadastro.
+- O cadastro identifica cliente, oferta, objetivo, responsável e ticket. O ticket cadastrado é levado ao planejamento econômico.
+- Análises exigem período, cadastro e métricas necessárias. O histórico guarda uma cópia dos números e parâmetros usados e não é alterado pela edição dos campos atuais.
+- Em Relatórios, cada diagnóstico pode gerar uma ação vinculada, com responsável e prazo editáveis e status Pendente / Em andamento / Concluída.
+- A Visão geral soma campanhas, análises, ações pendentes e atrasadas. Relatórios compara a última análise à anterior da mesma rota; janelas e atribuições devem ser equivalentes.
+- **Imprimir / PDF** imprime a página aberta; use Relatórios para exportar o histórico e a execução da campanha.
+- `journey.js` concentra as páginas da jornada. O produto continua local, sem autenticação, assinatura ou sincronização.

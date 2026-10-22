@@ -111,11 +111,11 @@
     <div class="workspace-top"><div class="campaign-select"><label for="campaign">Cliente / campanha</label><select id="campaign"></select></div><div class="toolbar"><button class="act" id="new-campaign">Nova campanha</button><button class="act" id="rename-campaign">Renomear</button><button class="act" id="export-data">Exportar backup</button><button class="act" id="import-data">Importar backup</button><input hidden id="backup-file" type="file" accept=".json,application/json"><button class="act" id="print-report">Imprimir / PDF</button></div></div>
     <div class="workspace-meta"><span id="save-status" role="status">Salvamento automático neste navegador</span><span>Exporte um backup para transferir as campanhas ou guardar uma cópia.</span></div>
   </section>
-  <dialog id="campaign-dialog"><form method="dialog"><h2 id="campaign-dialog-title">Nova campanha</h2><label for="campaign-name">Nome do cliente / campanha</label><input id="campaign-name" maxlength="160" required placeholder="Ex.: Natália · Bioessency · Outubro"><p class="nota">Cada campanha tem seus próprios números, parâmetros e aprendizados. Os exemplos iniciais servem como referência.</p><div class="dialog-actions"><button class="act" type="button" id="cancel-campaign">Cancelar</button><button class="act primary" type="submit">Salvar campanha</button></div></form></dialog>
+  <dialog id="campaign-dialog"><form method="dialog"><h2 id="campaign-dialog-title">Nova campanha</h2><label for="campaign-name">Nome do cliente / campanha</label><input id="campaign-name" maxlength="160" required placeholder="Ex.: Natália · Bioessency · Outubro"><p class="nota">Cada campanha tem seus próprios números, parâmetros e aprendizados. Após criar, preencha o cadastro em Clientes e campanhas.</p><div class="dialog-actions"><button class="act" type="button" id="cancel-campaign">Cancelar</button><button class="act primary" type="submit">Salvar campanha</button></div></form></dialog>
   <p id="app-feedback" role="status" hidden></p>
   <div class="principle"><b>Métrica-mãe decide. Métricas secundárias explicam. O funil localiza. O responsável corrige. A próxima rodada aprende.</b> CPA manda.</div>
   <nav role="tablist" id="tabs"></nav>
-  <p class="nota" style="margin-bottom:18px">Os campos começam com exemplos do método. Substitua pelos números da campanha antes de tomar decisões.</p>
+  <p class="nota" id="campaign-mode" style="margin-bottom:18px"></p>
   <div class="module-toolbar"><div><h2 id="group-title"></h2><p id="group-description"></p></div><div class="module-jump"><label for="module-jump">Ir direto para</label><select id="module-jump"></select></div></div>
   <main id="view" role="tabpanel" tabindex="0"></main>
   <p class="foot">Os dados ficam apenas neste navegador (localStorage); nada é enviado a servidor. Números que o POP não define aparecem como <span class="chip prov">provisório</span> e podem ser editados em Governança → Parâmetros; os que vêm do documento aparecem como <span class="chip pop">POP</span>.</p>
@@ -124,6 +124,7 @@
 <script type="module">
 import * as E from "./engine.js";
 import { createWorkspace } from "./workspace.js";
+import { PAGES, DESCRIPTIONS, createJourney, requiredFields } from "./journey.js";
 import { TABELAS, CHECKLISTS, MOTIVOS_PERDA } from "./content.js";
 const { brl, AREAS } = E;
 
@@ -134,7 +135,7 @@ const store = createWorkspace(localStorage, saved => {
   status.textContent = saved ? "Salvo neste navegador" : "Não foi possível salvar. Exporte um backup agora.";
   status.classList.toggle("no", !saved);
 });
-const n = (v) => (v === "" || v == null ? NaN : Number(String(v).replace(",", ".")));
+const n = (v) => (v == null || String(v).trim() === "" ? NaN : Number(String(v).replace(",", ".")));
 const P = () => store.get("params");
 const today = new Date().toLocaleDateString("en-CA");
 const num = (x, d = 0) => (Number.isFinite(x) ? x.toLocaleString("pt-BR", { maximumFractionDigits: d }) : "—");
@@ -349,7 +350,7 @@ const etapasCtx = (title, etapas) => (d) => {
 CTX["med-pagina"] = etapasCtx("venda direta por página", E.ETAPAS_PAGINA);
 CTX["med-vsl"] = etapasCtx("VSL", E.ETAPAS_VSL);
 CTX["med-quiz"] = etapasCtx("Quiz / diagnóstico", E.ETAPAS_QUIZ);
-const defVals = (id) => { const st = store.get(id); return Object.fromEntries(CALCS[id].fields.map((f) => [f.id, st[f.id] ?? f.def])); };
+const defVals = (id) => { const st = store.get(id); return Object.fromEntries(CALCS[id].fields.map((f) => [f.id, st[f.id] ?? (store.get("campaign-meta").demo === false ? (f.type === "c" ? false : "") : f.def)])); };
 
 // Logs (registro de aprendizados e benchmark)
 const LOGS = {
@@ -362,7 +363,7 @@ const LOGS = {
 };
 
 // ---- Estrutura das abas ---------------------------------------------------------------
-const TABS = {
+const MODEL_TABS = {
   "Low Ticket": [["c", "low-papel"], ["c", "low-bumps"], ["c", "low-criativo"], ["c", "low-escala"], ["c", "low-diag"], ["t", "papelLow"], ["t", "bumps"], ["t", "testeAbo"], ["t", "cascata3d"], ["t", "preEscala"], ["t", "deterioracao"], ["t", "metricasLow"], ["t", "sinaisLow"], ["t", "roteamento"], ["t", "fluxoLow"]],
   "Médio Ticket": [["t", "medioArq"], ["c", "med-eco"], ["t", "medioPreFunil"], ["c", "med-teste"], ["t", "medioTeste"], ["c", "med-pagina"], ["t", "medioPagina"], ["c", "med-vsl"], ["t", "vsl"], ["c", "med-quiz"], ["t", "quiz"], ["c", "med-assist"], ["k", "medioComercialSLA"], ["t", "comercialMedio"], ["c", "med-hibrido"], ["t", "hibrido"], ["t", "medioEscala"], ["t", "medioSinais"], ["t", "fluxoMedio"]],
   "High Ticket": [["c", "high-eco"], ["t", "highEcoRef"], ["k", "highDados"], ["c", "high-diag"], ["c", "high-motivos"], ["k", "highQualidade"], ["t", "highArq"], ["t", "highJanela"], ["t", "highCascata"], ["t", "highEscala"], ["t", "highCadencia"], ["t", "fluxoHigh"]],
@@ -370,16 +371,16 @@ const TABS = {
   "Aprendizado": [["l", "ap-log"], ["t", "inteligencia"], ["c", "ap-portfolio"], ["k", "portfolio"], ["l", "ap-bench"], ["k", "benchmark"], ["c", "ap-radar"], ["k", "radarSinais"]],
   "Governança": [["t", "objetivo"], ["k", "rapidaGestor"], ["k", "finalDecisao"], ["c", "gov-msg"], ["t", "hierarquia"], ["t", "quemDecide"], ["t", "roteamento"], ["t", "cadenciaTime"], ["p", "params"]],
 };
-const groups = Object.keys(TABS);
+const groups = PAGES;
 let currentGroup = store.get("ui").group;
 if (!groups.includes(currentGroup)) currentGroup = groups[0];
 
 // ---- Renderização ---------------------------------------------------------------------
 function fieldHtml(id, f, vals) {
-  const v = vals[f.id] ?? f.def;
+  const v = vals[f.id] ?? (store.get("campaign-meta").demo === false ? (f.type === "c" ? false : "") : f.def);
   const fid = `${id}-${f.id}`;
   if (f.type === "c") return `<label class="check full"><input type="checkbox" id="${fid}" data-k="${f.id}" ${v ? "checked" : ""}> ${esc(f.label)}</label>`;
-  if (Array.isArray(f.type)) return `<div class="${f.full ? "full" : ""}"><label for="${fid}">${esc(f.label)}</label><select id="${fid}" data-k="${f.id}">${f.type.map((o) => { const [val, lab] = o.split("|"); return `<option value="${val}" ${v === val ? "selected" : ""}>${esc(lab)}</option>`; }).join("")}</select></div>`;
+  if (Array.isArray(f.type)) return `<div class="${f.full ? "full" : ""}"><label for="${fid}">${esc(f.label)}</label><select id="${fid}" data-k="${f.id}">${v === "" && !f.type.some(o => o.startsWith("|")) ? '<option value="">Selecione</option>' : ""}${f.type.map((o) => { const [val, lab] = o.split("|"); return `<option value="${val}" ${v === val ? "selected" : ""}>${esc(lab)}</option>`; }).join("")}</select></div>`;
   if (f.type === "a") return `<div class="${f.full ? "full" : ""}"><label for="${fid}">${esc(f.label)}</label><textarea id="${fid}" data-k="${f.id}">${esc(v)}</textarea></div>`;
   const attrs = f.type === "n" ? 'type="text" inputmode="decimal"' : f.type === "d" ? 'type="date"' : 'type="text"';
   return `<div class="${f.full ? "full" : ""}"><label for="${fid}">${esc(f.label)}</label><input id="${fid}" data-k="${f.id}" ${attrs} value="${esc(v)}"></div>`;
@@ -395,7 +396,7 @@ function srcFields(src) {
 function renderCalc(id) {
   const m = CALCS[id], vals = store.get(id);
   const extra = id === "gov-msg" ? srcFields(CTX_LABEL[vals.fonte] ? vals.fonte : "high-diag") : "";
-  return `<section class="card" data-calc="${id}">${head(m)}<div class="grid"><div class="fields">${m.fields.map((f) => fieldHtml(id, f, vals)).join("")}${extra}${id === "gov-msg" ? "" : `<div class="full"><button class="act" data-reset="${id}">Restaurar exemplo</button></div>`}</div><div class="out" aria-live="polite"></div></div></section>`;
+  return `<section class="card" data-calc="${id}">${head(m)}<div class="grid"><div class="fields">${m.fields.map((f) => fieldHtml(id, f, vals)).join("")}${extra}${id === "gov-msg" ? "" : `<div class="full"><button class="act" data-reset="${id}">${store.get("campaign-meta").demo === false ? "Limpar campos" : "Restaurar exemplo"}</button></div>`}</div><div class="out" aria-live="polite"></div></div></section>`;
 }
 function renderTable(id) {
   const t = TABELAS[id];
@@ -425,14 +426,32 @@ function renderParams() {
 function renderTabs() {
   $("#tabs").innerHTML = groups.map((g) => `<button role="tab" id="tab-${groups.indexOf(g)}" aria-controls="view" tabindex="${g === currentGroup ? 0 : -1}" aria-selected="${g === currentGroup}" data-g="${esc(g)}">${esc(g)}</button>`).join("");
 }
+function pageModules() {
+  const model = journey.meta().model;
+  const modules = MODEL_TABS[model] || MODEL_TABS["Low Ticket"];
+  const planning = {"Low Ticket":["low-papel","low-bumps"],"Médio Ticket":["med-eco"],"High Ticket":["high-eco"],"Lançamento":["lan-proj"]};
+  if (currentGroup === "Planejamento") return modules.filter(([kind,id]) => kind === "c" && planning[model].includes(id));
+  if (currentGroup === "Análise da campanha") return [["c", journey.source()], ...modules.filter(([kind,id]) => kind === "c" && !planning[model].includes(id) && !CTX_LABEL[id])];
+  if (currentGroup === "Testes e aprendizados") return MODEL_TABS.Aprendizado;
+  if (currentGroup === "Configurações") return [...MODEL_TABS.Governança.filter(([kind])=>kind!=="c"), ...modules.filter(([kind])=>kind!=="c")];
+  return [];
+}
+function go(page) {
+  if (!groups.includes(page)) return;
+  currentGroup = page; store.set("ui", {group: page}); renderTabs(); renderView();
+}
 function renderView() {
   $("#group-title").textContent = currentGroup;
-  $("#group-description").textContent = GROUP_DESCRIPTIONS[currentGroup];
+  $("#group-description").textContent = DESCRIPTIONS[currentGroup];
   $("#view").setAttribute("aria-labelledby", "tab-" + groups.indexOf(currentGroup));
-  $("#module-jump").innerHTML = '<option value="">Selecione uma ferramenta</option>' + TABS[currentGroup].map(([kind, id], i) => `<option value="module-${i}">${esc(({c:CALCS,t:TABELAS,k:CHECKLISTS,l:LOGS,p:{params:{title:"Parâmetros"}}})[kind][id].title || ({t:TABELAS,k:CHECKLISTS})[kind]?.[id]?.titulo || id)}</option>`).join("");
-  $("#view").innerHTML = TABS[currentGroup].map(([k, id]) => ({ c: renderCalc, t: renderTable, k: renderCheck, l: renderLog, p: renderParams })[k](id)).join("");
-  [...$("#view").children].forEach((section, i) => section.id = `module-${i}`);
-  document.querySelectorAll("[data-calc]").forEach((s) => calc(s.dataset.calc));
+  $("#campaign-mode").textContent = journey.meta().demo ? "Demonstração · números de exemplo" : journey.meta().demo === false ? "Campanha real · informe os números do período" : "Dados da versão anterior · confira os números e o cadastro antes de analisar";
+  const modules = pageModules();
+  $("#module-jump").closest(".module-jump").hidden = !modules.length;
+  const moduleName = (kind,id) => ({c:CALCS,t:TABELAS,k:CHECKLISTS,l:LOGS,p:{params:{title:"Parâmetros"}}})[kind][id].title || ({t:TABELAS,k:CHECKLISTS})[kind]?.[id]?.titulo || id;
+  $("#module-jump").innerHTML = '<option value="">Selecione uma ferramenta</option>' + modules.map(([kind,id],i)=>`<option value="module-${i}">${esc(moduleName(kind,id))}</option>`).join("");
+  $("#view").innerHTML = journey.render(currentGroup) + modules.map(([kind,id],i)=>({c:renderCalc,t:renderTable,k:renderCheck,l:renderLog,p:renderParams})[kind](id).replace('class="card"',`class="card" id="module-${i}"`)).join("") +
+    (currentGroup === "Análise da campanha" ? '<section class="card"><h2>Registrar esta análise</h2><p class="hint">Salve o diagnóstico com os números e parâmetros usados. O histórico não muda quando você editar os campos depois.</p><button class="act primary" data-save-analysis>Salvar análise do período</button> <button class="act" data-page="Relatórios">Ver histórico</button></section>' : "");
+  document.querySelectorAll("[data-calc]").forEach(section=>calc(section.dataset.calc));
 }
 
 function readVals(id, fields, root) {
@@ -455,7 +474,9 @@ function calc(id) {
   m.fields.filter(f => f.type === "n").forEach(f => {
     const el = $(`[data-k="${f.id}"]`, root); if (el) el.setAttribute("aria-invalid", String(invalid.includes(f)));
   });
-  try { html = invalid.length ? `<div class="empty" role="alert">Confira os campos: ${invalid.map(f => esc(f.label)).join(", ")}. Use números válidos, sem valores negativos; percentuais vão de 0 a 100.</div>` : m.run(raw, P()) || empty(); }
+  const hasData = m.fields.some(f => f.type === "n" && raw[f.id] !== "" && raw[f.id] != null);
+  const missing = CTX[id] ? requiredFields(id, m.fields).filter(key => raw[key] == null || String(raw[key]).trim() === "") : [];
+  try { html = missing.length ? `<div class="empty">Preencha os dados necessários para um diagnóstico: ${missing.map(key=>esc(m.fields.find(f=>f.id===key)?.label||key)).join(", ")}.</div>` : !hasData && m.fields.some(f=>f.type==="n") ? empty() : invalid.length ? `<div class="empty" role="alert">Confira os campos: ${invalid.map(f => esc(f.label)).join(", ")}. Use números válidos, sem valores negativos; percentuais vão de 0 a 100.</div>` : m.run(raw, P()) || empty(); }
   catch (e) { console.error(id, e); html = empty(); }
   const out = $(".out", root);
   const abertos = [...out.querySelectorAll("details[data-keep]")].map((d) => d.open);
@@ -489,14 +510,7 @@ $("#view").addEventListener("click", (e) => {
   if (t.dataset.del) { const [id, i] = t.dataset.del.split(":"); const st = store.get(id); st.entries.splice(+i, 1); store.set(id, st); renderView(); }
 });
 
-const GROUP_DESCRIPTIONS = {
-  "Low Ticket": "Defina a economia da oferta, teste os criativos e localize o gargalo do funil.",
-  "Médio Ticket": "Compare a viabilidade da oferta e a eficiência de cada rota de venda.",
-  "High Ticket": "Conecte a aquisição ao pipeline comercial e à qualidade dos leads.",
-  "Lançamento": "Planeje a captação e acompanhe o ritmo até o fechamento do carrinho.",
-  "Aprendizado": "Registre as hipóteses, os resultados e o que a próxima rodada deve testar.",
-  "Governança": "Alinhe os responsáveis, os critérios de decisão e os parâmetros da operação.",
-};
+
 function feedback(message) { $("#app-feedback").hidden = false; $("#app-feedback").textContent = message; }
 async function copyText(text, button) {
   try { await navigator.clipboard.writeText(text); button.textContent = "Copiado ✓"; }
@@ -524,10 +538,11 @@ $("#cancel-campaign").addEventListener("click", () => $("#campaign-dialog").clos
 $("#campaign-dialog form").addEventListener("submit", event => {
   event.preventDefault(); const name = $("#campaign-name").value.trim();
   if (!name) { $("#campaign-name").setCustomValidity("Informe um nome para a campanha."); $("#campaign-name").reportValidity(); return; }
-  if (dialogMode === "new") store.add(name); else store.rename(name);
+  if (dialogMode === "new") { store.add(name); store.set("campaign-meta", {model:"Low Ticket",demo:false}); } else store.rename(name);
   $("#campaign-dialog").close(); refreshCampaign();
 });
 $("#campaign-name").addEventListener("input", event => event.target.setCustomValidity(""));
+$("#campaign").addEventListener("journey-switch", refreshCampaign);
 $("#campaign").addEventListener("change", event => { store.select(event.target.value); refreshCampaign(); });
 $("#module-jump").addEventListener("change", event => {
   const section = document.getElementById(event.target.value); if (!section) return;
@@ -564,6 +579,7 @@ $("#print-report").addEventListener("click", () => {
   window.print();
 });
 
+const journey = createJourney({store,esc,fieldHtml,F,CALCS,CTX,P,parameters:()=>Object.fromEntries(E.PARAMS.map(p=>[p.id,P()[p.id]??p.def])),calc,renderView,go,feedback,labels:CTX_LABEL});
 renderCampaigns();
 renderTabs();
 renderView();

@@ -38,7 +38,7 @@ export function createWorkspace(storage, onSave = () => {}) {
     state = JSON.parse(raw);
     if (!Array.isArray(state.projects) || !state.projects.length || !state.projects.some(p => p.id === state.active)) throw new Error('Não foi possível ler as campanhas salvas. Exporte os dados do navegador antes de continuar.');
   } else {
-    const first = { id: id(), name: Object.keys(legacy).length ? 'Campanha original' : 'Minha primeira campanha', data: legacy };
+    const first = { id: id(), name: Object.keys(legacy).length ? 'Campanha original' : 'Minha primeira campanha', data: Object.keys(legacy).length ? legacy : {'campaign-meta':{model:'Low Ticket',demo:false}} };
     state = { active: first.id, projects: [first] };
   }
   const active = () => state.projects.find(p => p.id === state.active);
