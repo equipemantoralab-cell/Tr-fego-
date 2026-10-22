@@ -145,8 +145,8 @@ export function decidirEscala({ cpaEsperado, cpaSerie }, cfg) {
 export function diagnosticarLow(d, cfg) {
   const c = C(cfg);
   const cpaReal = num(d.cpaReal), cpaEsp = num(d.cpaEsperado);
-  if (!Number.isFinite(cpaReal) || !Number.isFinite(cpaEsp))
-    return { decisao: "INFORME CPA", tom: "amber", diagnostico: "Informe CPA real e CPA esperado.", evidencias: [], responsaveis: [], leituras: [] };
+  if (!Number.isFinite(cpaReal) || !Number.isFinite(cpaEsp) || cpaReal < 0 || cpaEsp <= 0)
+    return { decisao: "INFORME CPA", tom: "amber", diagnostico: "Informe CPA real maior ou igual a zero e CPA esperado maior que zero.", evidencias: [], responsaveis: [], leituras: [] };
   const cpaOk = cpaReal <= cpaEsp;
 
   const defs = [
@@ -164,7 +164,7 @@ export function diagnosticarLow(d, cfg) {
   });
   const f = Object.fromEntries(leituras.map((l) => [l.id, l.faixa]));
   const abaixo = (id) => f[id] === "abaixo";
-  const ev = leituras.map((l) => `${l.label}: ${String(l.valor).replace(".", ",")} (${l.faixa}${l.faixa === "abaixo" ? `; mínimo ${l.saud}` : ""})`);
+  const ev = leituras.map((l) => `${l.label}: ${String(l.valor).replace(".", ",")} (${l.faixa === "abaixo" ? "abaixo da referência" : l.faixa === "excelente" ? "acima da referência desta taxa" : "atende à referência desta taxa"}${l.faixa === "abaixo" ? `; mínimo ${l.saud}` : ""})`);
   const retG = d.retGancho || "", retC = d.retCriativo || "";
   if (retG) ev.push(`Retenção de gancho: ${{ ok: "sem queda relevante", queda: "queda precoce perceptível", forte: "abandono forte no início" }[retG]}`);
   if (retC) ev.push(`Retenção ao longo do criativo: ${{ ok: "mantém até o CTA", queda: "perde atenção no desenvolvimento", forte: "queda forte antes do CTA" }[retC]}`);
@@ -199,7 +199,7 @@ export function diagnosticarLow(d, cfg) {
   if (abaixo("bumpBarato") || abaixo("bumpMaior"))
     F.push({ decisao: "AVALIAR BUMPS", tom: "amber", diag: "Adesão de bump abaixo da meta: avaliar aderência e obviedade do complemento, julgando pelo impacto no ticket médio. Bump não conserta produto principal fraco.", a: [AREAS.estrategia] });
   if (f.ctr === "excelente" && F.length === 0)
-    F.push({ decisao: "REVISAR QUALIFICAÇÃO", tom: "amber", diag: "CTR alto + CPA ruim: há interesse, mas possivelmente pouco qualificado ou ruptura depois do clique. Revisar qualificação da mensagem e coerência anúncio → página.", a: [AREAS.copy, AREAS.estrategia] });
+    F.push({ decisao: "REVISAR QUALIFICAÇÃO", tom: "amber", diag: "O CTR está acima da referência de cliques, mas o CPA está acima da meta. Isso não torna o CTR ruim: cliques, isoladamente, não garantem vendas a um custo viável. Qualificação da mensagem e coerência anúncio → página são hipóteses a investigar; confirme com dados de conversão e atribuição antes de alterar a campanha.", a: [AREAS.copy, AREAS.estrategia] });
 
   const temDados = leituras.length > 0 || retG || retC || Number.isFinite(cpm);
   if (F.length === 0)
@@ -208,6 +208,26 @@ export function diagnosticarLow(d, cfg) {
       : { decisao: "INFORME MÉTRICAS", tom: "amber", diagnostico: "CPA fora da meta. Preencha as métricas secundárias para localizar o gargalo.", evidencias: ev, ...sem([AREAS.trafego]), leituras };
   const [p, ...resto] = F;
   return { decisao: p.decisao, tom: p.tom, diagnostico: p.diag, evidencias: [...ev, ...resto.map((r) => `Também observar: ${r.decisao} — ${r.diag}`)], ...sem(p.a), leituras, achados: F };
+}
+
+/** Separa o custo por venda da leitura isolada das taxas do funil. */
+export function painelMetricasLow(d, cfg) {
+  const resultado = diagnosticarLow(d, cfg);
+  const real = num(d.cpaReal), meta = num(d.cpaEsperado);
+  const valido = has(d.cpaReal) && has(d.cpaEsperado) && real >= 0 && meta > 0;
+  const economia = {
+    label: "CPA real", valor: real, referencia: meta,
+    status: valido ? (real <= meta ? "Dentro da meta" : "Acima da meta") : "Informe CPA e meta válida",
+    tom: valido ? (real <= meta ? "green" : "red") : "amber",
+    interpretacao: valido ? (real <= meta ? "O custo por venda atende à meta informada." : "O custo por venda excede a meta, mesmo que as taxas de clique e conversão estejam acima das referências.") : "O CPA-alvo deve ser maior que zero.",
+  };
+  const metricas = (resultado.leituras || []).map(l => ({
+    ...l,
+    status: l.faixa === "abaixo" ? "Abaixo da referência" : l.exc != null && l.valor >= l.exc ? "Acima da referência" : "Atende à referência",
+    referencia: l.saud,
+    interpretacao: l.id === "ctr" ? "Mede cliques por impressão; não mede o custo por venda." : "Avaliação desta etapa isolada; não determina a viabilidade econômica da campanha.",
+  }));
+  return { resultado, economia, metricas };
 }
 
 // --------------------------------------------------------------- Médio Ticket

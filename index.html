@@ -208,9 +208,10 @@ const CALCS = {
       F("connect", "Connect Rate (%)", "n", 91), F("paginaCheckout", "Página → Checkout (%)", "n", 11), F("checkoutCompra", "Checkout → Compra (%)", "n", ""), F("bumpBarato", "Bump barato (%)", "n", ""), F("bumpMaior", "Bump maior (%)", "n", "")],
     run(d, p) {
       const x = CTX["low-diag"](d, p); const r = x.r;
-      const rows = (r.leituras || []).map((l) => [esc(l.label), String(l.valor).replace(".", ","), `<span class="${l.faixa === "abaixo" ? "no" : "ok"}">${l.faixa}</span>`]);
-      return card(r) + (rows.length ? table(["Métrica", "Valor", "Faixa"], rows) : "") +
-        msgBox(x);
+      const panel = E.painelMetricasLow(d, p), cost = panel.economia;
+      const rows = [["CPA real", esc(brl(cost.valor)), `Até ${esc(brl(cost.referencia))}`, `<span class="${cost.tom === "red" ? "no" : cost.tom === "green" ? "ok" : ""}">${esc(cost.status)}</span>`, esc(cost.interpretacao)],
+        ...panel.metricas.map(l => [esc(l.label), `${num(l.valor, 2)}%`, `Mínimo ${num(l.referencia, 2)}%${l.exc != null ? ` · faixa superior a partir de ${num(l.exc, 2)}%` : ""}`, `<span class="${l.faixa === "abaixo" ? "no" : ""}">${esc(l.status)}</span>`, esc(l.interpretacao)])];
+      return card(r) + `<h3 style="font-size:15px">Custo por venda e taxas do funil</h3><p class="nota">O CPA é comparado à meta de custo. As taxas são comparadas às referências de cada etapa. Uma taxa alta pode coexistir com um CPA acima da meta. Percentuais: 1 significa 1%; 100 significa 100%.</p>` + table(["Métrica", "Valor informado", "Referência", "Leitura isolada", "Como interpretar"], rows) + msgBox(x);
     } },
 
   "med-eco": { group: "Médio Ticket", sec: "18", title: "Economia pré-funil (CPA/CAC máximo)",

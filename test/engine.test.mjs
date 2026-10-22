@@ -121,3 +121,25 @@ describe('Novas regras (POP completo)', () => {
     expect(r.extras.cacMarginal).toBe(300)
   })
 })
+
+describe('Consistência entre diagnóstico e painel de métricas', () => {
+ it('CPA real e meta iguais a 100 estão dentro da meta, mesmo com todas as taxas em 100%', () => {
+  const p=E.painelMetricasLow({cpaReal:100,cpaEsperado:100,ctr:100,connect:100,paginaCheckout:100,checkoutCompra:100,bumpBarato:100,bumpMaior:100});
+  assert.equal(p.resultado.decisao,'PRESERVAR');assert.equal(p.economia.status,'Dentro da meta');
+  assert.equal(p.metricas.find(l=>l.id==='ctr').status,'Acima da referência');
+ });
+ it('taxas acima da referência não tornam CPA acima da meta saudável', () => {
+  const p=E.painelMetricasLow({cpaReal:100,cpaEsperado:23,ctr:100,connect:100,paginaCheckout:100,checkoutCompra:100});
+  assert.equal(p.economia.status,'Acima da meta');assert.equal(p.economia.tom,'red');
+  assert.match(p.resultado.diagnostico,/não torna o CTR ruim/);
+  assert.match(p.metricas.find(l=>l.id==='ctr').interpretacao,/não mede o custo por venda/);
+ });
+ it('taxa abaixo da referência não muda a decisão de preservar CPA dentro da meta', () => {
+  const p=E.painelMetricasLow({cpaReal:20,cpaEsperado:23,ctr:.5,connect:91});
+  assert.equal(p.resultado.decisao,'PRESERVAR');assert.equal(p.metricas[0].status,'Abaixo da referência');
+ });
+});
+it('meta de CPA zero pede correção em vez de preservar uma economia inválida',()=>{
+ const p=E.painelMetricasLow({cpaReal:0,cpaEsperado:0,ctr:100});
+ assert.equal(p.resultado.decisao,'INFORME CPA');assert.equal(p.economia.tom,'amber');
+});
