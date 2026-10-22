@@ -389,7 +389,7 @@ function fieldHtml(id, f, vals) {
   const attrs = f.type === "n" ? 'type="text" inputmode="decimal"' : f.type === "d" ? 'type="date"' : 'type="text"';
   return `<div class="${f.full ? "full" : ""}"><label for="${fid}">${esc(f.label)}</label><input id="${fid}" data-k="${f.id}" ${attrs} value="${esc(v)}"></div>`;
 }
-const head = (m) => `<h2><span class="sec">§ ${esc(m.sec)}</span>${esc(m.title)}</h2><p class="hint">${esc(m.hint || "")}</p>`;
+const head = (m) => `<h2>${esc(m.title)}</h2><p class="hint">${esc(m.hint || "")}</p>`;
 
 function srcFields(src) {
   const sm = CALCS[src], sv = store.get(src);
@@ -406,7 +406,7 @@ function renderCalc(id) {
 function renderTable(id) {
   const t = TABELAS[id];
   const filtro = t.filtro ? `<input class="filtro" type="search" placeholder="Filtrar sinais…" data-filter aria-label="Filtrar">` : "";
-  return `<details class="card" data-tbl="${id}"><summary><span class="sec">§ ${esc(t.sec)}</span>${esc(t.titulo)}</summary>${filtro}${table(t.cols, t.rows.map((r) => r.map(esc)))}${t.nota ? `<p class="nota">${esc(t.nota)}</p>` : ""}</details>`;
+  return `<details class="card" data-tbl="${id}"><summary>${esc(t.titulo)}</summary>${filtro}${table(t.cols, t.rows.map((r) => r.map(esc)))}${t.nota ? `<p class="nota">${esc(t.nota)}</p>` : ""}</details>`;
 }
 function renderCheck(id) {
   const c = CHECKLISTS[id], st = store.get("chk:" + id);
@@ -415,7 +415,7 @@ function renderCheck(id) {
   let out;
   if (problema) { const fracos = c.itens.filter((_, i) => st[i]); out = fracos.length ? `<ul>${fracos.map((i) => `<li><b>Ação:</b> ${esc(i.a)} <span class="nota">(${esc(i.t.split(" — ")[0])})</span></li>`).join("")}</ul>` : `<p class="nota">Nenhum ponto fraco marcado.</p>`; }
   else out = `<div class="prog"><i style="width:${Math.round((feitos / c.itens.length) * 100)}%"></i></div><p class="nota">${feitos}/${c.itens.length} atendidos${feitos < c.itens.length ? ` — pendentes: ${c.itens.map((i, k) => (st[k] ? null : i.t)).filter(Boolean).length}` : " — pronto para decidir."}</p>`;
-  return `<details class="card" data-chk="${id}" ${feitos ? "open" : ""}><summary><span class="sec">§ ${esc(c.sec)}</span>${esc(c.titulo)}</summary>${c.itens.map((it, i) => `<label class="check"><input type="checkbox" data-i="${i}" ${st[i] ? "checked" : ""}> ${esc(it.t)}</label>`).join("")}<div class="chk-out">${out}</div>${c.nota ? `<p class="nota">${esc(c.nota)}</p>` : ""}</details>`;
+  return `<details class="card" data-chk="${id}" ${feitos ? "open" : ""}><summary>${esc(c.titulo)}</summary>${c.itens.map((it, i) => `<label class="check"><input type="checkbox" data-i="${i}" ${st[i] ? "checked" : ""}> ${esc(it.t)}</label>`).join("")}<div class="chk-out">${out}</div>${c.nota ? `<p class="nota">${esc(c.nota)}</p>` : ""}</details>`;
 }
 function renderLog(id) {
   const m = LOGS[id], st = store.get(id), entries = st.entries || [];
@@ -425,7 +425,7 @@ function renderLog(id) {
 function renderParams() {
   const vals = P();
   return `<details class="card" open><summary>Parâmetros (POP × provisório)</summary><p class="hint">Valores do POP aparecem como <span class="chip pop">POP</span>. Onde o documento não define o número, o valor é <span class="chip prov">provisório</span> e deve ser substituído pelo histórico real do cliente.</p>
-    <div class="fields" data-params>${E.PARAMS.map((p) => `<div><label for="par-${p.id}">${esc(p.label)} <span class="chip ${p.fonte === "POP" ? "pop" : "prov"}">${p.fonte === "POP" ? "POP" : "provisório"}</span> <span class="sec">§${esc(p.sec)}</span></label><input id="par-${p.id}" data-p="${p.id}" type="text" inputmode="decimal" value="${esc(vals[p.id] ?? p.def)}">${p.nota ? `<span class="nota">${esc(p.nota)}</span>` : ""}</div>`).join("")}<div class="full"><button class="act" data-resetparams>Restaurar padrões</button></div></div></details>`;
+    <div class="fields" data-params>${E.PARAMS.map((p) => `<div><label for="par-${p.id}">${esc(p.label)} <span class="chip ${p.fonte === "POP" ? "pop" : "prov"}">${p.fonte === "POP" ? "POP" : "provisório"}</span> </label><input id="par-${p.id}" data-p="${p.id}" type="text" inputmode="decimal" value="${esc(vals[p.id] ?? p.def)}">${p.nota ? `<span class="nota">${esc(p.nota)}</span>` : ""}</div>`).join("")}<div class="full"><button class="act" data-resetparams>Restaurar padrões</button></div></div></details>`;
 }
 
 function renderTabs() {
