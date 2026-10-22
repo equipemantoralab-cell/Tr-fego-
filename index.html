@@ -96,6 +96,7 @@
   nav{border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:24px}nav button{border-radius:7px;padding:10px 18px}nav button[aria-selected=true]{background:var(--acc2)}
   .module-toolbar{display:flex;justify-content:space-between;gap:16px;align-items:center;margin:0 0 18px}.module-toolbar h2{margin:0;font-size:21px}.module-toolbar p{margin:4px 0 0;color:var(--mut);font-size:13px}.module-jump{width:300px;flex-shrink:0}
   .card{border-radius:12px;padding:22px;box-shadow:0 2px 4px #24242403}.card h2{font-size:17px}.sec{font-size:10px;letter-spacing:.02em}.kpi{background:#f6f7f4;padding:14px}.kpi b{font-size:21px}.kpi small{margin-bottom:5px}.grid{gap:24px}.fields{gap:14px}
+  button.danger{color:var(--red);border-color:var(--red)}button:disabled{opacity:.5;cursor:not-allowed}
   button:hover{filter:brightness(.97)}button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:3px}section[id],details[id]{scroll-margin-top:20px}
   dialog{color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:28px;max-width:480px;width:calc(100% - 32px)}dialog::backdrop{background:#161b1680}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}.primary{background:var(--acc2)!important;color:white!important}
   #app-feedback{padding:12px 16px;border:1px solid var(--line);border-radius:8px;background:var(--soft)}
@@ -445,6 +446,11 @@ function renderView() {
   $("#group-description").textContent = DESCRIPTIONS[currentGroup];
   $("#view").setAttribute("aria-labelledby", "tab-" + groups.indexOf(currentGroup));
   $("#campaign-mode").textContent = journey.meta().demo ? "Demonstração · números de exemplo" : journey.meta().demo === false ? "Campanha real · informe os números do período" : "Dados da versão anterior · confira os números e o cadastro antes de analisar";
+  if (!store.current().id && currentGroup !== "Visão geral") {
+    $("#module-jump").closest(".module-jump").hidden = true;
+    $("#view").innerHTML = '<div class="empty">Nenhuma campanha ativa. Clique em Nova campanha para começar ou restaure uma campanha na lixeira da Visão geral.</div>';
+    return;
+  }
   const modules = pageModules();
   $("#module-jump").closest(".module-jump").hidden = !modules.length;
   const moduleName = (kind,id) => ({c:CALCS,t:TABELAS,k:CHECKLISTS,l:LOGS,p:{params:{title:"Parâmetros"}}})[kind][id].title || ({t:TABELAS,k:CHECKLISTS})[kind]?.[id]?.titulo || id;
@@ -517,7 +523,8 @@ async function copyText(text, button) {
   catch { feedback("Não foi possível copiar automaticamente. Selecione o texto da mensagem e copie manualmente."); }
 }
 function renderCampaigns() {
-  $("#campaign").innerHTML = store.list().map(p => `<option value="${esc(p.id)}" ${p.id === store.current().id ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+  $("#campaign").innerHTML = store.list().length ? store.list().map(p => `<option value="${esc(p.id)}" ${p.id === store.current().id ? "selected" : ""}>${esc(p.name)}</option>`).join("") : '<option value="">Nenhuma campanha</option>';
+  $("#rename-campaign").disabled = !store.current().id;
   document.title = `${store.current().name} · Gestão de Tráfego — Mantora Lab`;
 }
 function refreshCampaign() {

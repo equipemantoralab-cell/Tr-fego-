@@ -29,3 +29,21 @@ test('backup preserva cadastro, análises e ações vinculadas',()=>{
  store.set('low-diag',{cpaReal:'15'});
  assert.equal(JSON.parse(store.get('analyses').entries[0].inputs).cpaReal,34);
 });
+test('botão de exclusão confirma a campanha e permite restaurar pela lixeira', async()=>{
+ const {createJourney}=await import('../journey.js');
+ const values=new Map(), storage={get length(){return values.size},key:i=>[...values.keys()][i],getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v)};
+ const store=createWorkspace(storage);const first=store.current().id;
+ const handlers={}, originalDocument=globalThis.document, originalWindow=globalThis.window;
+ let page='',message='',confirmed=false;
+ globalThis.document={querySelector:selector=>selector==='#view'?{addEventListener:(event,fn)=>handlers[event]=fn}:{dispatchEvent:()=>{}}};
+ globalThis.window={confirm:()=>confirmed};
+ try {
+  const journey=createJourney({store,esc:s=>String(s??''),go:p=>page=p,feedback:m=>message=m});
+  assert.match(journey.render('Visão geral'),/Excluir campanha/);
+  const click=dataset=>handlers.click({target:{closest:()=>({dataset,hasAttribute:()=>false})}});
+  click({deleteProject:first});assert.equal(store.list().length,1);
+  confirmed=true;click({deleteProject:first});assert.equal(store.list().length,0);assert.equal(page,'Visão geral');assert.match(message,/excluída/);
+  assert.match(journey.render('Visão geral'),/Restaurar campanha/);
+  click({restoreProject:first});assert.equal(store.list().length,1);assert.equal(store.current().id,first);
+ } finally {globalThis.document=originalDocument;globalThis.window=originalWindow;}
+});

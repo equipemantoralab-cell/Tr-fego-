@@ -39,3 +39,22 @@ test('registro existente corrompido não é sobrescrito silenciosamente', () => 
   const storage = new Storage(); storage.setItem(REGISTRY_KEY,'invalid');
   assert.throws(()=>createWorkspace(storage)); assert.equal(storage.getItem(REGISTRY_KEY),'invalid');
 });
+test('excluir campanha ativa preserva as outras e restaura todos os dados após recarregar', () => {
+  const storage=new Storage(), w=createWorkspace(storage), first=w.current().id;
+  w.set('actions',{entries:[{title:'Revisar página',status:'Pendente'}]});w.add('Outra');const second=w.current().id;
+  w.select(first);assert.equal(w.remove(first),true);assert.equal(w.current().id,second);assert.equal(w.list().length,1);
+  const reloaded=createWorkspace(storage);assert.equal(reloaded.trash()[0].id,first);assert.equal(reloaded.restore(first),true);
+  reloaded.select(first);assert.equal(reloaded.get('actions').entries[0].title,'Revisar página');
+});
+test('excluir a última campanha deixa a operação vazia sem recriar exemplos', () => {
+  const storage=new Storage(), w=createWorkspace(storage), first=w.current().id;
+  assert.equal(w.remove(first),true);assert.equal(w.current().id,'');assert.deepEqual(w.list(),[]);
+  w.set('ui',{group:'Visão geral'});assert.deepEqual(createWorkspace(storage).list(),[]);
+  assert.deepEqual(w.export().projects,[]);assert.deepEqual(validateBackup(w.export()),[]);
+  assert.equal(w.restore(first),true);assert.equal(w.current().id,first);
+});
+test('falha ao salvar exclusão mantém campanha e dados na operação', () => {
+ const storage=new Storage(), w=createWorkspace(storage), first=w.current().id;
+ w.set('low-diag',{cpaReal:34});storage.setItem=()=>{throw new Error('quota')};
+ assert.equal(w.remove(first),false);assert.equal(w.current().id,first);assert.equal(w.get('low-diag').cpaReal,34);assert.deepEqual(w.trash(),[]);
+});

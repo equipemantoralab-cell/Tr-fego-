@@ -3,7 +3,7 @@ export const REGISTRY_KEY = 'mantora:trafego:workspaces:v1';
 const id = () => globalThis.crypto.randomUUID();
 export function validateBackup(value) {
   if (!value || value.app !== 'mantora-trafego' || value.version !== 1 ||
-      !Array.isArray(value.projects) || !value.projects.length || value.projects.length > 200) {
+      !Array.isArray(value.projects) || value.projects.length > 200) {
     throw new Error('Selecione um backup válido do Gestão de Tráfego.');
   }
   for (const project of value.projects) {
@@ -36,7 +36,7 @@ export function createWorkspace(storage, onSave = () => {}) {
   let state;
   if (raw) {
     state = JSON.parse(raw);
-    if (!Array.isArray(state.projects) || !state.projects.length || !state.projects.some(p => p.id === state.active)) throw new Error('Não foi possível ler as campanhas salvas. Exporte os dados do navegador antes de continuar.');
+    if (!Array.isArray(state.projects) || (state.projects.length ? !state.projects.some(p => p.id === state.active) : state.active !== null)) throw new Error('Não foi possível ler as campanhas salvas. Exporte os dados do navegador antes de continuar.');
   } else {
     const first = { id: id(), name: Object.keys(legacy).length ? 'Campanha original' : 'Minha primeira campanha', data: Object.keys(legacy).length ? legacy : {'campaign-meta':{model:'Low Ticket',demo:false}} };
     state = { active: first.id, projects: [first] };
@@ -47,14 +47,33 @@ export function createWorkspace(storage, onSave = () => {}) {
     catch { onSave(false); return false; }
   }
   return {
-    get: key => active().data[key] ?? {},
-    set(key, value) { active().data[key] = value; save(); },
+    get: key => active()?.data[key] ?? {},
+    set(key, value) { if (!active()) return false; active().data[key] = value; return save(); },
     list: () => state.projects.map(({ id, name }) => ({ id, name })),
-    current: () => ({ id: active().id, name: active().name }),
+    current: () => ({ id: active()?.id || "", name: active()?.name || "Nenhuma campanha" }),
     select(key) { if (state.projects.some(p => p.id === key)) { state.active = key; save(); } },
     add(name) { const project = { id: id(), name: name.trim().slice(0,160), data: {} }; state.projects.push(project); state.active = project.id; save(); },
+    trash: () => (state.trash || []).map(({id,name}) => ({id,name})),
+    remove(key) {
+      const project = state.projects.find(p => p.id === key); if (!project) return false;
+      const previous = structuredClone(state);
+      state.projects = state.projects.filter(p => p.id !== key);
+      state.trash = [project, ...(state.trash || [])];
+      if (state.active === key) state.active = state.projects[0]?.id || null;
+      if (!save()) { state = previous; return false; }
+      return true;
+    },
+    restore(key) {
+      const project = (state.trash || []).find(p => p.id === key); if (!project) return false;
+      const previous = structuredClone(state);
+      state.trash = state.trash.filter(p => p.id !== key);
+      state.projects.push(project);
+      if (!state.active) state.active = project.id;
+      if (!save()) { state = previous; return false; }
+      return true;
+    },
     rename(name) { active().name = name.trim().slice(0,160); save(); },
     export() { return { app: 'mantora-trafego', version: 1, exportedAt: new Date().toISOString(), projects: structuredClone(state.projects) }; },
-    import(value) { const projects = validateBackup(value); state.projects.push(...projects); state.active = projects[0].id; save(); return projects.length; },
+    import(value) { const projects = validateBackup(value); state.projects.push(...projects); if (projects.length) state.active = projects[0].id; save(); return projects.length; },
   };
 }

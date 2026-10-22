@@ -37,3 +37,7 @@ A navegação agora segue oito páginas: **Visão geral**, **Clientes e campanha
 - A Visão geral soma campanhas, análises, ações pendentes e atrasadas. Relatórios compara a última análise à anterior da mesma rota; janelas e atribuições devem ser equivalentes.
 - **Imprimir / PDF** imprime a página aberta; use Relatórios para exportar o histórico e a execução da campanha.
 - `journey.js` concentra as páginas da jornada. O produto continua local, sem autenticação, assinatura ou sincronização.
+
+### Excluir campanhas
+
+Em Visão geral → Campanhas da operação, **Excluir campanha** pede confirmação e move a campanha com seus dados para a lixeira local. A campanha sai do seletor e dos indicadores. Em **Lixeira de campanhas**, **Restaurar campanha** recupera seus números, análises e ações. É possível excluir a última campanha e deixar a operação vazia. Backups exportam apenas as campanhas ativas; restaure uma campanha antes de incluí-la em um backup.
