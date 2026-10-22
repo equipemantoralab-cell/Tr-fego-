@@ -41,3 +41,7 @@ A navegação agora segue oito páginas: **Visão geral**, **Clientes e campanha
 ### Excluir campanhas
 
 Em Visão geral → Campanhas da operação, **Excluir campanha** pede confirmação e move a campanha com seus dados para a lixeira local. A campanha sai do seletor e dos indicadores. Em **Lixeira de campanhas**, **Restaurar campanha** recupera seus números, análises e ações. É possível excluir a última campanha e deixar a operação vazia. Backups exportam apenas as campanhas ativas; restaure uma campanha antes de incluí-la em um backup.
+
+### Preenchimento separado dos resultados
+
+As páginas com calculadoras têm duas etapas: **Preencher dados** e **Resultados e orientações**. Os campos ficam na primeira; diagnósticos, tabelas, regras e explicações das calculadoras ficam na segunda. O botão **Ver resultados e orientações** alterna entre as etapas sem apagar o preenchimento. O salvamento de análises fica na etapa de resultados. Ao abrir outra página ou campanha, o preenchimento é exibido primeiro.

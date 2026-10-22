@@ -96,6 +96,8 @@
   nav{border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:24px}nav button{border-radius:7px;padding:10px 18px}nav button[aria-selected=true]{background:var(--acc2)}
   .module-toolbar{display:flex;justify-content:space-between;gap:16px;align-items:center;margin:0 0 18px}.module-toolbar h2{margin:0;font-size:21px}.module-toolbar p{margin:4px 0 0;color:var(--mut);font-size:13px}.module-jump{width:300px;flex-shrink:0}
   .card{border-radius:12px;padding:22px;box-shadow:0 2px 4px #24242403}.card h2{font-size:17px}.sec{font-size:10px;letter-spacing:.02em}.kpi{background:#f6f7f4;padding:14px}.kpi b{font-size:21px}.kpi small{margin-bottom:5px}.grid{gap:24px}.fields{gap:14px}
+  [hidden]{display:none!important}.workflow-switch{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.workflow-switch button[aria-pressed=true]{background:var(--acc2);color:white;border-color:var(--acc2)}.workflow-next{display:flex;justify-content:flex-end;margin:16px 0 28px}
+  @media print{.workflow-switch,.workflow-next{display:none!important}}
   button.danger{color:var(--red);border-color:var(--red)}button:disabled{opacity:.5;cursor:not-allowed}
   button:hover{filter:brightness(.97)}button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:3px}section[id],details[id]{scroll-margin-top:20px}
   dialog{color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:28px;max-width:480px;width:calc(100% - 32px)}dialog::backdrop{background:#161b1680}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}.primary{background:var(--acc2)!important;color:white!important}
@@ -114,7 +116,6 @@
   </section>
   <dialog id="campaign-dialog"><form method="dialog"><h2 id="campaign-dialog-title">Nova campanha</h2><label for="campaign-name">Nome do cliente / campanha</label><input id="campaign-name" maxlength="160" required placeholder="Ex.: Natália · Bioessency · Outubro"><p class="nota">Cada campanha tem seus próprios números, parâmetros e aprendizados. Após criar, preencha o cadastro em Clientes e campanhas.</p><div class="dialog-actions"><button class="act" type="button" id="cancel-campaign">Cancelar</button><button class="act primary" type="submit">Salvar campanha</button></div></form></dialog>
   <p id="app-feedback" role="status" hidden></p>
-  <div class="principle"><b>Métrica-mãe decide. Métricas secundárias explicam. O funil localiza. O responsável corrige. A próxima rodada aprende.</b> CPA manda.</div>
   <nav role="tablist" id="tabs"></nav>
   <p class="nota" id="campaign-mode" style="margin-bottom:18px"></p>
   <div class="module-toolbar"><div><h2 id="group-title"></h2><p id="group-description"></p></div><div class="module-jump"><label for="module-jump">Ir direto para</label><select id="module-jump"></select></div></div>
@@ -374,6 +375,7 @@ const MODEL_TABS = {
   "Governança": [["t", "objetivo"], ["k", "rapidaGestor"], ["k", "finalDecisao"], ["c", "gov-msg"], ["t", "hierarquia"], ["t", "quemDecide"], ["t", "roteamento"], ["t", "cadenciaTime"], ["p", "params"]],
 };
 const groups = PAGES;
+let workflowPanel = "input";
 let currentGroup = store.get("ui").group;
 if (!groups.includes(currentGroup)) currentGroup = groups[0];
 
@@ -398,7 +400,8 @@ function srcFields(src) {
 function renderCalc(id) {
   const m = CALCS[id], vals = store.get(id);
   const extra = id === "gov-msg" ? srcFields(CTX_LABEL[vals.fonte] ? vals.fonte : "high-diag") : "";
-  return `<section class="card" data-calc="${id}">${head(m)}<div class="grid"><div class="fields">${m.fields.map((f) => fieldHtml(id, f, vals)).join("")}${extra}${id === "gov-msg" ? "" : `<div class="full"><button class="act" data-reset="${id}">${store.get("campaign-meta").demo === false ? "Limpar campos" : "Restaurar exemplo"}</button></div>`}</div><div class="out" aria-live="polite"></div></div></section>`;
+  return `<section class="card" data-calc="${id}"><h2>${esc(m.title)}</h2><div class="fields" style="margin-top:16px">${m.fields.map((f) => fieldHtml(id, f, vals)).join("")}${extra}${id === "gov-msg" ? "" : `<div class="full"><button class="act" data-reset="${id}">${store.get("campaign-meta").demo === false ? "Limpar campos" : "Restaurar exemplo"}</button></div>`}</div></section>`;
+
 }
 function renderTable(id) {
   const t = TABELAS[id];
@@ -440,8 +443,21 @@ function pageModules() {
 }
 function go(page) {
   if (!groups.includes(page)) return;
-  currentGroup = page; store.set("ui", {group: page}); renderTabs(); renderView();
+  currentGroup = page; workflowPanel = "input"; store.set("ui", {group: page}); renderTabs(); renderView();
 }
+function showWorkflowPanel(panel) {
+  workflowPanel = panel === "results" ? "results" : "input";
+  $("#data-entry-panel").hidden = workflowPanel !== "input";
+  $("#results-panel").hidden = workflowPanel !== "results";
+  const period = store.get("analysis-period");
+  if ($("#result-period")) $("#result-period").textContent = currentGroup === "Análise da campanha" ? `Período: ${period.start || "não informado"} a ${period.end || "não informado"}` : "Planejamento da campanha";
+  document.querySelectorAll(".workflow-switch [data-workflow]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.workflow === workflowPanel)));
+  $("#module-jump").closest(".module-jump").hidden = workflowPanel === "results";
+}
+$("#view").addEventListener("click", event => {
+  const button = event.target.closest("[data-workflow]");
+  if (button) showWorkflowPanel(button.dataset.workflow);
+});
 function renderView() {
   $("#group-title").textContent = currentGroup;
   $("#group-description").textContent = DESCRIPTIONS[currentGroup];
@@ -456,8 +472,13 @@ function renderView() {
   $("#module-jump").closest(".module-jump").hidden = !modules.length;
   const moduleName = (kind,id) => ({c:CALCS,t:TABELAS,k:CHECKLISTS,l:LOGS,p:{params:{title:"Parâmetros"}}})[kind][id].title || ({t:TABELAS,k:CHECKLISTS})[kind]?.[id]?.titulo || id;
   $("#module-jump").innerHTML = '<option value="">Selecione uma ferramenta</option>' + modules.map(([kind,id],i)=>`<option value="module-${i}">${esc(moduleName(kind,id))}</option>`).join("");
-  $("#view").innerHTML = journey.render(currentGroup) + modules.map(([kind,id],i)=>({c:renderCalc,t:renderTable,k:renderCheck,l:renderLog,p:renderParams})[kind](id).replace('class="card"',`class="card" id="module-${i}"`)).join("") +
+  const inputHtml = journey.render(currentGroup) + modules.map(([kind,id],i)=>({c:renderCalc,t:renderTable,k:renderCheck,l:renderLog,p:renderParams})[kind](id).replace('class="card"',`class="card" id="module-${i}"`)).join("");
+  const calculators = modules.filter(([kind]) => kind === "c");
+  const resultsHtml = calculators.map(([,id])=>`<section class="card" data-result-for="${id}">${head(CALCS[id])}<div class="out" aria-live="polite"></div></section>`).join("") +
     (currentGroup === "Análise da campanha" ? '<section class="card"><h2>Registrar esta análise</h2><p class="hint">Salve o diagnóstico com os números e parâmetros usados. O histórico não muda quando você editar os campos depois.</p><button class="act primary" data-save-analysis>Salvar análise do período</button> <button class="act" data-page="Relatórios">Ver histórico</button></section>' : "");
+  $("#view").innerHTML = calculators.length ? `<div class="workflow-switch" role="group" aria-label="Etapas de preenchimento e resultados"><button class="act" data-workflow="input" aria-controls="data-entry-panel">1. Preencher dados</button><button class="act" data-workflow="results" aria-controls="results-panel">2. Resultados e orientações</button></div><section id="data-entry-panel" aria-label="Preencher dados">${inputHtml}<div class="workflow-next"><button class="act primary" data-workflow="results">Ver resultados e orientações</button></div></section><section id="results-panel" aria-label="Resultados e orientações"><div class="card"><h2>Resultados da campanha</h2><p>${esc(store.current().name)} · ${esc(journey.meta().model)}</p><p id="result-period" class="nota"></p><p class="nota">Estes resultados usam os dados preenchidos nesta página.</p><button class="act" data-workflow="input">Voltar ao preenchimento</button></div>${resultsHtml}</section>` : inputHtml;
+  if (calculators.length) showWorkflowPanel(workflowPanel);
+
   document.querySelectorAll("[data-calc]").forEach(section=>calc(section.dataset.calc));
 }
 
@@ -485,13 +506,13 @@ function calc(id) {
   const missing = CTX[id] ? requiredFields(id, m.fields).filter(key => raw[key] == null || String(raw[key]).trim() === "") : [];
   try { html = missing.length ? `<div class="empty">Preencha os dados necessários para um diagnóstico: ${missing.map(key=>esc(m.fields.find(f=>f.id===key)?.label||key)).join(", ")}.</div>` : !hasData && m.fields.some(f=>f.type==="n") ? empty() : invalid.length ? `<div class="empty" role="alert">Confira os campos: ${invalid.map(f => esc(f.label)).join(", ")}. Use números válidos, sem valores negativos; percentuais vão de 0 a 100.</div>` : m.run(raw, P()) || empty(); }
   catch (e) { console.error(id, e); html = empty(); }
-  const out = $(".out", root);
+  const out = $(`[data-result-for="${id}"] .out`);
   const abertos = [...out.querySelectorAll("details[data-keep]")].map((d) => d.open);
   out.innerHTML = html;
   out.querySelectorAll("details[data-keep]").forEach((d, i) => { if (abertos[i]) d.open = true; });
 }
 
-$("#tabs").addEventListener("click", (e) => { const g = e.target.dataset?.g; if (g) { currentGroup = g; store.set("ui", { group: g }); renderTabs(); renderView(); } });
+$("#tabs").addEventListener("click", (e) => { const g = e.target.dataset?.g; if (g) { workflowPanel = "input"; currentGroup = g; store.set("ui", { group: g }); renderTabs(); renderView(); } });
 $("#view").addEventListener("input", (e) => {
   const t = e.target;
   if (t.matches("[data-p]")) { const p = P(); p[t.dataset.p] = t.value; store.set("params", p); return; }
@@ -529,6 +550,7 @@ function renderCampaigns() {
   document.title = `${store.current().name} · Gestão de Tráfego — Mantora Lab`;
 }
 function refreshCampaign() {
+  workflowPanel = "input";
   currentGroup = store.get("ui").group;
   if (!groups.includes(currentGroup)) currentGroup = groups[0];
   renderCampaigns(); renderTabs(); renderView();
@@ -562,7 +584,7 @@ $("#tabs").addEventListener("keydown", event => {
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
   event.preventDefault(); let index = groups.indexOf(currentGroup);
   index = event.key === "Home" ? 0 : event.key === "End" ? groups.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + groups.length) % groups.length;
-  currentGroup = groups[index]; store.set("ui", { group: currentGroup }); renderTabs(); renderView();
+  workflowPanel = "input"; currentGroup = groups[index]; store.set("ui", { group: currentGroup }); renderTabs(); renderView();
   document.getElementById(`tab-${index}`).focus();
 });
 $("#export-data").addEventListener("click", () => {
